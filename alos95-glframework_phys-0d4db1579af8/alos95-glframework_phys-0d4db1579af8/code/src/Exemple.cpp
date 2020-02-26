@@ -5,6 +5,8 @@
 #include <cstdio>
 
 /////////Forward declarations
+void PlaneCollisionCalculus(float dt, int index);
+
 namespace LilSpheres {
 	extern const int maxParticles;
 	extern int firstParticleIdx;
@@ -23,6 +25,8 @@ namespace Utils
 		glm::vec3 temp = glm::vec3(values[0], values[1], values[2]);
 		return temp;
 	}
+	//3 vertex of the cube defined in render.cpp file class Box()
+	glm::vec3 points[3] = { glm::vec3(-5,0,-5),glm::vec3(5,0,-5),glm::vec3(5,0,5) };
 }
 
 namespace {
@@ -78,6 +82,7 @@ void Exemple_PhysicsInit()
 void Exemple_PhysicsUpdate(float dt) {
 	for (int i = 0; i < s_PS.numParticles; i++) {		
 		s_PS.timeLeft[i] -= dt;
+		PlaneCollisionCalculus(dt, i);
 		if (s_PS.timeLeft[i] < 0)
 		{
 			s_PS.directorVector[i] = Utils::floatToVec(Utils::standardDirectorVector);
@@ -97,7 +102,21 @@ void PlaneCollisionCalculus(float dt, int index)
 {
 	glm::vec3 tempPos = s_PS.position[index] + (dt * (s_PS.velocity[index] * s_PS.directorVector[index]));
 	glm::vec3 tempVel = s_PS.velocity[index] + (dt * p_pars.acceleration);
-
+	glm::vec3 PQ = glm::vec3(Utils::points[1] - Utils::points[0]);
+	glm::vec3 PR = glm::vec3(Utils::points[2] - Utils::points[0]);
+	glm::vec3 normal = glm::normalize(glm::cross(PR, PQ));
+	if (glm::dot(normal, s_PS.position[index]) < 0 || glm::dot(normal, tempPos) < 0)
+	{
+		//Si colision
+		s_PS.position[index] = tempPos - 2 * (glm::dot(normal, tempPos)) *  normal;
+		s_PS.velocity[index] = tempVel - 2 * (glm::dot(normal, tempVel)) * normal;
+	}
+	else
+	{
+		//No colision
+		s_PS.position[index] = s_PS.position[index] + (dt * (s_PS.velocity[index] * s_PS.directorVector[index]));
+		s_PS.velocity[index] = s_PS.velocity[index] + (dt * p_pars.acceleration);
+	}
 }
 
 void Exemple_PhysicsCleanup() {
