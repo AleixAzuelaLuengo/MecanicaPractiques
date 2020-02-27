@@ -21,11 +21,10 @@ namespace Utils
 	class Plane
 	{
 		public:
-		float x, y, z;
 		float A, B, C, D;
 		glm::vec3 normal;
 		Plane() {
-			x = y = z = A = B = C = D = 0;
+			A = B = C = D = 0;
 			normal = glm::vec3(0);
 		};
 		Plane(glm::vec3 point1, glm::vec3 point2, glm::vec3 point3)
@@ -37,8 +36,9 @@ namespace Utils
 			B = normal.y;
 			C = normal.z;
 			D = (-A * point1.x - B * point1.y - C * point1.z);
+			printf("%f, %f, %f, D:%f\n", glm::cross(PR, PQ).x, glm::cross(PR, PQ).y, glm::cross(PR, PQ).z,D);
 
-			printf("%.2f, %.2f, %.2f, %.2f", A, B, C, D);
+			//printf("%.2f, %.2f, %.2f, %.2f", A, B, C, D);
 		};
 		void constructorPlane(glm::vec3 point1, glm::vec3 rectPoint, glm::vec3 center)
 		{
@@ -54,9 +54,11 @@ namespace Utils
 		}
 		bool hasCollisioned(glm::vec3 position, glm::vec3 tempPos)
 		{
-			float uno = (glm::dot(glm::normalize(normal), position) + D);
-			float dos = (glm::dot(glm::normalize(normal), tempPos) + D);
-			return (uno * dos <= 0);
+			float uno = (glm::dot((normal), position) + D);
+			float dos = (glm::dot((normal), tempPos) + D);
+
+			float res = uno * dos;
+			return ((uno * dos) <= 0);
 		};
 	};
 
@@ -65,7 +67,11 @@ namespace Utils
 	public:
 		glm::vec3 center;
 		float radius;
-		Sphere();
+		Sphere() 
+		{
+			center = glm::vec3(0);
+			radius = 0;
+		}
 		Sphere(glm::vec3 pos, float rad)
 		{
 			center = pos;
@@ -75,7 +81,7 @@ namespace Utils
 
 	Plane cubePlaneCollision[6];
 	float standardDirectorVector[3] = { 0, 0, 0 };
-	float standardVelocity[3] = { 0, -10, 0 };
+	float standardVelocity[3] = { 0, -5, 0 };
 	glm::vec3 floatToVec(float* values)
 	{
 		glm::vec3 temp = glm::vec3(values[0], values[1], values[2]);
@@ -128,7 +134,7 @@ void Exemple_GUI() {
 
 void Exemple_PhysicsInit() 
 {
-	p_pars.acceleration = glm::vec3(0, -0, 0);
+	p_pars.acceleration = glm::vec3(0, -9.81, 0);
 	s_PS.numParticles = 100;
 	s_PS.directorVector = new glm::vec3[s_PS.numParticles];
 	s_PS.velocity = new glm::vec3[s_PS.numParticles];
@@ -158,25 +164,6 @@ void Exemple_PhysicsInit()
 	LilSpheres::updateParticles(0, s_PS.numParticles, &(s_PS.position[0].x));
 }
 
-void PlaneCollisionCalculus(float dt, int index, Utils::Plane plane)
-{
-	glm::vec3 tempPos = s_PS.position[index] + (dt * (s_PS.velocity[index]));
-	glm::vec3 tempVel = s_PS.velocity[index] + (dt * p_pars.acceleration);
-
-	if (plane.hasCollisioned(s_PS.position[index], tempPos))
-	{
-		//Si colision
-		s_PS.position[index] = tempPos - 2 * (glm::dot(plane.normal, tempPos) + plane.D) *  glm::normalize(plane.normal);
-		s_PS.velocity[index] = tempVel - 2 * (glm::dot(plane.normal, tempVel)) * glm::normalize(plane.normal);
-	}
-	else
-	{
-		//No colision
-		s_PS.position[index] = s_PS.position[index] + (dt * (s_PS.velocity[index]));
-		s_PS.velocity[index] = s_PS.velocity[index] + (dt * p_pars.acceleration);
-	}
-}
-
 void SphereCollisionCalculus(float dt, int index, Utils::Sphere sphere)
 {
 	Utils::Plane spherePlane;
@@ -200,16 +187,43 @@ void SphereCollisionCalculus(float dt, int index, Utils::Sphere sphere)
 	{
 		spherePlane.constructorPlane(recPointPlus, recPointMinus, sphere.center);
 	}
-	PlaneCollisionCalculus(dt, index, spherePlane);
+	//PlaneCollisionCalculus(dt, index, spherePlane);
 }
 
+void ComputePlaneCollisions(glm::vec3 &tempPos, glm::vec3 &tempVel, Utils::Plane plane)
+{
+	//Get the next position and velocity and calculate where the particle should be when it bounces
+	tempPos = tempPos - 2 * (glm::dot(plane.normal, tempPos) + plane.D) * glm::normalize(plane.normal);
+	tempVel = tempVel - 2 * (glm::dot(plane.normal, tempVel)) * glm::normalize(plane.normal);
+}
+
+
+
 void Exemple_PhysicsUpdate(float dt) {
-	for (int i = 0; i < s_PS.numParticles; i++) {		
+	for (int i = 0; i < s_PS.numParticles; i++) {
 		s_PS.timeLeft[i] -= dt;
 
-		//for(int j=0; j<5; j++)
-			PlaneCollisionCalculus(dt, i, Utils::cubePlaneCollision[6]);
-			if(i ==0)printf("Particle has position %.2f, %.2f, %.2f\n", s_PS.position[0].x, s_PS.position[0].y, s_PS.position[0].z);
+		//Calculate next position and next velocity
+		glm::vec3 tempPos = s_PS.position[i] + (dt * (s_PS.velocity[i]));
+		glm::vec3 tempVel = s_PS.velocity[i] + (dt * p_pars.acceleration);
+
+		//Check collisions with all 6 planes in the cube 
+		for (int j = 0; j < 6; j++) {
+			 if(Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
+			 {
+				 //Compute the collisions and save them in tempPos and tempVel
+				 ComputePlaneCollisions(tempPos,tempVel,Utils::cubePlaneCollision[j]);
+			 }
+		}
+		
+		//Change the position.
+		//When we compute the collisions, all these changes are saved in tempPos and tempVel,
+		//so these are the final positions after all collisions are computed.
+		s_PS.position[i] = tempPos;
+		s_PS.velocity[i] = tempVel;
+				
+		
+		//Check life of the particle
 		if (s_PS.timeLeft[i] < 0)
 		{
 			s_PS.directorVector[i] = Utils::floatToVec(Utils::standardDirectorVector);
