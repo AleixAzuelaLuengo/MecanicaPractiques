@@ -56,7 +56,6 @@ namespace Utils
 		{
 			float uno = (glm::dot(glm::normalize(normal), position) + D);
 			float dos = (glm::dot(glm::normalize(normal), tempPos) + D);
-			printf("Collision Detection %.2f, %.2f\n", uno, dos);
 			return (uno * dos <= 0);
 		};
 	};
@@ -76,7 +75,7 @@ namespace Utils
 
 	Plane cubePlaneCollision[6];
 	float standardDirectorVector[3] = { 0, 0, 0 };
-	float standardVelocity[3] = { 0, 10, 0 };
+	float standardVelocity[3] = { 0, -10, 0 };
 	glm::vec3 floatToVec(float* values)
 	{
 		glm::vec3 temp = glm::vec3(values[0], values[1], values[2]);
@@ -161,7 +160,6 @@ void Exemple_PhysicsInit()
 
 void PlaneCollisionCalculus(float dt, int index, Utils::Plane plane)
 {
-	plane.normal = glm::normalize(plane.normal);
 	glm::vec3 tempPos = s_PS.position[index] + (dt * (s_PS.velocity[index]));
 	glm::vec3 tempVel = s_PS.velocity[index] + (dt * p_pars.acceleration);
 
