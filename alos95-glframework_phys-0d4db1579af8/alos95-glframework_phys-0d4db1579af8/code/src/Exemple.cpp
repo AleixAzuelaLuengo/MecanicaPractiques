@@ -80,10 +80,6 @@ namespace Utils
 
 		bool hasCollisioned(glm::vec3 tempPos)
 		{
-			printf("Distance between particle and center is %f \n", glm::distance(tempPos, center));
-			printf("Position is %f, %f, %f \n", tempPos.x, tempPos.y, tempPos.z);
-			printf("Center is %f, %f, %f \n", center.x, center.y, center.z);
-			printf("Radius is %f \n", radius);
 			return glm::distance(tempPos , center) < radius;
 		}
 	};
@@ -179,35 +175,37 @@ void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, 
 {
 	glm::vec3 normal;
 	float D;
+	float d = glm::distance(tempPos, sphere.center);
 	//landa squared
 	float landaSquared = (glm::pow(s_PS.velocity[index].x, 2)) + (glm::pow(s_PS.velocity[index].y, 2)) + (glm::pow(s_PS.velocity[index].z, 2));
 	//landa
-	float landaX = (2 * (s_PS.position[index].x * s_PS.velocity[index].x)) + (2 * (s_PS.velocity[index].x) * sphere.center.x);
-	float landaY = (2 * (s_PS.position[index].y * s_PS.velocity[index].y)) + (2 * (s_PS.velocity[index].y) * sphere.center.y);
-	float landaZ = (2 * (s_PS.position[index].z * s_PS.velocity[index].z)) + (2 * (s_PS.velocity[index].z) * sphere.center.z);
+	float landaX = (2 * (s_PS.position[index].x * -s_PS.velocity[index].x)) + (2 * (s_PS.velocity[index].x) * -sphere.center.x);
+	float landaY = (2 * (s_PS.position[index].y * -s_PS.velocity[index].y)) + (2 * (s_PS.velocity[index].y) * -sphere.center.y);
+	float landaZ = (2 * (s_PS.position[index].z * -s_PS.velocity[index].z)) + (2 * (s_PS.velocity[index].z) * -sphere.center.z);
 	float landa = landaX + landaY + landaZ;
 	//independent number
-	float numberX = glm::pow(s_PS.position[index].x, 2) + glm::pow(sphere.center.x, 2) + (2 * (s_PS.position[index].x) * sphere.center.x);
-	float numberY = glm::pow(s_PS.position[index].y, 2) + glm::pow(sphere.center.y, 2) + (2 * (s_PS.position[index].y) * sphere.center.y);
-	float numberZ = glm::pow(s_PS.position[index].z, 2) + glm::pow(sphere.center.z, 2) + (2 * (s_PS.position[index].z) * sphere.center.z);
+	float numberX = glm::pow(s_PS.position[index].x, 2) + glm::pow(-sphere.center.x, 2) + (2 * (s_PS.position[index].x * -sphere.center.x));
+	float numberY = glm::pow(s_PS.position[index].y, 2) + glm::pow(-sphere.center.y, 2) + (2 * (s_PS.position[index].y * -sphere.center.y));
+	float numberZ = glm::pow(s_PS.position[index].z, 2) + glm::pow(-sphere.center.z, 2) + (2 * (s_PS.position[index].z * -sphere.center.z));
 	float number = numberX + numberY + numberZ;
 	//2nd grade equations solved
-	float potencia = glm::pow(landa, 2);
-	float numberEquation = 4 * (landaSquared)* number;
-	float arrelcuadrada = glm::sqrt(potencia - numberEquation);
-	float solutionLandaPlus = (-landa + arrelcuadrada / (2 * landaSquared));
-	float solutionLandaMinus = (-landa - arrelcuadrada / (2 * landaSquared));
+	float numberEquation = glm::pow(landa, 2) + (-4 * (landaSquared) * number);
+	float arrelcuadrada = glm::sqrt(numberEquation);
+	float solutionLandaPlus = (-landa + arrelcuadrada) / (2 * landaSquared);
+	float solutionLandaMinus = (-landa - arrelcuadrada) / (2 * landaSquared);
 	//Calculate the 2 point to see which one is the closest one
 	glm::vec3 recPointPlus = s_PS.position[index] + (solutionLandaPlus * s_PS.velocity[index]);
 	glm::vec3 recPointMinus = s_PS.position[index] + (solutionLandaMinus * s_PS.velocity[index]);
 	if (glm::distance(s_PS.position[index], recPointPlus) > glm::distance(s_PS.position[index], recPointMinus))
 	{
 		normal = recPointMinus - sphere.center;
+		normal = glm::normalize(normal);
 		D = -((normal.x * recPointMinus.x) + (normal.y * recPointMinus.y) + (normal.z * recPointMinus.z));
 	}
 	else
 	{
 		normal = recPointPlus - sphere.center;
+		normal = glm::normalize(normal);
 		D = -((normal.x * recPointPlus.x) + (normal.y * recPointPlus.y) + (normal.z * recPointPlus.z));
 	}
 	tempPos -= 2 * (glm::dot(normal, tempPos) + D) * glm::normalize(normal);
