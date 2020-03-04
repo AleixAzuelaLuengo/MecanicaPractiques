@@ -20,6 +20,11 @@ void setupAxis();
 void cleanupAxis();
 void drawAxis();
 }
+namespace Sphere {
+	void setupSphere(glm::vec3 pos, float radius);
+	void cleanupSphere();
+	void drawSphere();
+}
 extern void setupPrims();
 extern void renderPrims();
 extern void cleanupPrims();
@@ -114,7 +119,7 @@ void GLrender() {
 	// render code
 	Box::drawCube();
 	Axis::drawAxis();
-
+	Sphere::drawSphere();
 	renderPrims();
 
 	ImGui::Render();

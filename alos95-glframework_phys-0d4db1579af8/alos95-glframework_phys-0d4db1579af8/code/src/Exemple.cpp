@@ -77,6 +77,15 @@ namespace Utils
 			center = pos;
 			radius = rad;
 		}
+
+		bool hasCollisioned(glm::vec3 tempPos)
+		{
+			printf("Distance between particle and center is %f \n", glm::distance(tempPos, center));
+			printf("Position is %f, %f, %f \n", tempPos.x, tempPos.y, tempPos.z);
+			printf("Center is %f, %f, %f \n", center.x, center.y, center.z);
+			printf("Radius is %f \n", radius);
+			return glm::distance(tempPos , center) < radius;
+		}
 	};
 
 	Plane cubePlaneCollision[6];
@@ -124,6 +133,8 @@ namespace {
 	} s_PS;
 }
 
+void CalculusPostPlaneCollision(glm::vec3 &tempPos, glm::vec3 &tempVel, Utils::Plane plane);
+
 void Exemple_GUI() {
 	ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
 	ImGui::SliderFloat("Max Position Ramge", &p_pars.max, 6.f, 10.f);
@@ -164,58 +175,77 @@ void Exemple_PhysicsInit()
 	LilSpheres::updateParticles(0, s_PS.numParticles, &(s_PS.position[0].x));
 }
 
-void SphereCollisionCalculus(float dt, int index, Utils::Sphere sphere)
+void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, Utils::Sphere sphere)
 {
-	Utils::Plane spherePlane;
-	glm::vec3 tempPos = s_PS.position[index] + (dt * (s_PS.velocity[index] * s_PS.directorVector[index]));
-	glm::vec3 tempVel = s_PS.velocity[index] + (dt * p_pars.acceleration);
-	glm::vec3 rectVec = tempPos - s_PS.position[index];
-	//Second Grade Equation Solved
-	float landaSquared = (glm::pow(rectVec.x, 2)) + (glm::pow(rectVec.y, 2)) + (glm::pow(rectVec.z, 2));
-	float landa = (2 * (s_PS.position[index].x * rectVec.x)) + (2 * (s_PS.position[index].y * rectVec.y)) + (2 * (s_PS.position[index].z * rectVec.z));
-	float number = (glm::pow(s_PS.position[index].x, 2)) + (glm::pow(s_PS.position[index].y, 2)) + (glm::pow(s_PS.position[index].z, 2));
-	float solutionLandaPlus = (-landa + glm::sqrt(glm::pow(landa, 2) - 4 * (landaSquared)* number)) / (2 * landaSquared);
-	float solutionLandaMinus = (-landa - glm::sqrt(glm::pow(landa, 2) - 4 * (landaSquared)* number)) / (2 * landaSquared);
+	glm::vec3 normal;
+	float D;
+	//landa squared
+	float landaSquared = (glm::pow(s_PS.velocity[index].x, 2)) + (glm::pow(s_PS.velocity[index].y, 2)) + (glm::pow(s_PS.velocity[index].z, 2));
+	//landa
+	float landaX = (2 * (s_PS.position[index].x * s_PS.velocity[index].x)) + (2 * (s_PS.velocity[index].x) * sphere.center.x);
+	float landaY = (2 * (s_PS.position[index].y * s_PS.velocity[index].y)) + (2 * (s_PS.velocity[index].y) * sphere.center.y);
+	float landaZ = (2 * (s_PS.position[index].z * s_PS.velocity[index].z)) + (2 * (s_PS.velocity[index].z) * sphere.center.z);
+	float landa = landaX + landaY + landaZ;
+	//independent number
+	float numberX = glm::pow(s_PS.position[index].x, 2) + glm::pow(sphere.center.x, 2) + (2 * (s_PS.position[index].x) * sphere.center.x);
+	float numberY = glm::pow(s_PS.position[index].y, 2) + glm::pow(sphere.center.y, 2) + (2 * (s_PS.position[index].y) * sphere.center.y);
+	float numberZ = glm::pow(s_PS.position[index].z, 2) + glm::pow(sphere.center.z, 2) + (2 * (s_PS.position[index].z) * sphere.center.z);
+	float number = numberX + numberY + numberZ;
+	//2nd grade equations solved
+	float potencia = glm::pow(landa, 2);
+	float numberEquation = 4 * (landaSquared)* number;
+	float arrelcuadrada = glm::sqrt(potencia - numberEquation);
+	float solutionLandaPlus = (-landa + arrelcuadrada / (2 * landaSquared));
+	float solutionLandaMinus = (-landa - arrelcuadrada / (2 * landaSquared));
 	//Calculate the 2 point to see which one is the closest one
-	glm::vec3 recPointPlus = s_PS.position[index] + (solutionLandaPlus * (rectVec));
-	glm::vec3 recPointMinus = s_PS.position[index] + (solutionLandaMinus * (rectVec));
+	glm::vec3 recPointPlus = s_PS.position[index] + (solutionLandaPlus * s_PS.velocity[index]);
+	glm::vec3 recPointMinus = s_PS.position[index] + (solutionLandaMinus * s_PS.velocity[index]);
 	if (glm::distance(s_PS.position[index], recPointPlus) > glm::distance(s_PS.position[index], recPointMinus))
 	{
-		spherePlane.constructorPlane(recPointMinus, recPointMinus, sphere.center);
+		normal = recPointMinus - sphere.center;
+		D = -((normal.x * recPointMinus.x) + (normal.y * recPointMinus.y) + (normal.z * recPointMinus.z));
 	}
 	else
 	{
-		spherePlane.constructorPlane(recPointPlus, recPointMinus, sphere.center);
+		normal = recPointPlus - sphere.center;
+		D = -((normal.x * recPointPlus.x) + (normal.y * recPointPlus.y) + (normal.z * recPointPlus.z));
 	}
-	//PlaneCollisionCalculus(dt, index, spherePlane);
+	tempPos -= 2 * (glm::dot(normal, tempPos) + D) * glm::normalize(normal);
+	tempVel -= 2 * (glm::dot(normal, tempVel)) * glm::normalize(normal);
 }
 
-void ComputePlaneCollisions(glm::vec3 &tempPos, glm::vec3 &tempVel, Utils::Plane plane)
+void CalculusPostPlaneCollision(glm::vec3 &tempPos, glm::vec3 &tempVel, Utils::Plane plane)
 {
 	//Get the next position and velocity and calculate where the particle should be when it bounces
-	tempPos = tempPos - 2 * (glm::dot(plane.normal, tempPos) + plane.D) * glm::normalize(plane.normal);
-	tempVel = tempVel - 2 * (glm::dot(plane.normal, tempVel)) * glm::normalize(plane.normal);
+	tempPos -=  2 * (glm::dot(plane.normal, tempPos) + plane.D) * glm::normalize(plane.normal);
+	tempVel -=  2 * (glm::dot(plane.normal, tempVel)) * glm::normalize(plane.normal);
 }
+
 
 
 
 void Exemple_PhysicsUpdate(float dt) {
+	Utils::Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f),  1.f);
 	for (int i = 0; i < s_PS.numParticles; i++) {
 		s_PS.timeLeft[i] -= dt;
 
 		//Calculate next position and next velocity
 		glm::vec3 tempPos = s_PS.position[i] + (dt * (s_PS.velocity[i]));
 		glm::vec3 tempVel = s_PS.velocity[i] + (dt * p_pars.acceleration);
-
+		
 		//Check collisions with all 6 planes in the cube 
-		for (int j = 0; j < 6; j++) {
+		/*for (int j = 0; j < 6; j++) {
 			 if(Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
 			 {
 				 //Compute the collisions and save them in tempPos and tempVel
-				 ComputePlaneCollisions(tempPos,tempVel,Utils::cubePlaneCollision[j]);
+				 CalculusPostPlaneCollision(tempPos,tempVel,Utils::cubePlaneCollision[j]);
 			 }
+		}*/
+
+		if (sphere.hasCollisioned(tempPos))
+		{
+			SphereCollisionCalculus(tempPos, tempVel, i, sphere);
 		}
-		
 		//Change the position.
 		//When we compute the collisions, all these changes are saved in tempPos and tempVel,
 		//so these are the final positions after all collisions are computed.
