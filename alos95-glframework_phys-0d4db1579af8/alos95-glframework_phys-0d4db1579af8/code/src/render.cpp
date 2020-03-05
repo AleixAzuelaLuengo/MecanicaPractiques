@@ -119,7 +119,6 @@ void GLrender() {
 	// render code
 	Box::drawCube();
 	Axis::drawAxis();
-	Sphere::drawSphere();
 	renderPrims();
 
 	ImGui::Render();

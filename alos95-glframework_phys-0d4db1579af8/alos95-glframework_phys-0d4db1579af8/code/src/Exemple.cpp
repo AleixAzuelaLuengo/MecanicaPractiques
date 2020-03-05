@@ -5,6 +5,11 @@
 #include <cstdio>
 
 /////////Forward declarations
+extern bool renderSphere;
+extern bool renderCapsule;
+extern bool renderParticles;
+extern bool renderCloth;
+extern bool renderCube;
 
 namespace {
 	static struct PhysParams {
@@ -32,6 +37,10 @@ namespace LilSpheres {
 	extern glm::vec3 velocity;
 }
 
+namespace Sphere {
+	extern void updateSphere(glm::vec3 pos, float radius = 1.f);
+}
+
 namespace Utils 
 {
 	class Plane
@@ -52,9 +61,6 @@ namespace Utils
 			B = normal.y;
 			C = normal.z;
 			D = (-A * point1.x - B * point1.y - C * point1.z);
-			printf("%f, %f, %f, D:%f\n", glm::cross(PR, PQ).x, glm::cross(PR, PQ).y, glm::cross(PR, PQ).z,D);
-
-			//printf("%.2f, %.2f, %.2f, %.2f", A, B, C, D);
 		};
 		void constructorPlane(glm::vec3 point1, glm::vec3 rectPoint, glm::vec3 center)
 		{
@@ -70,11 +76,7 @@ namespace Utils
 		}
 		bool hasCollisioned(glm::vec3 position, glm::vec3 tempPos)
 		{
-			float uno = (glm::dot((normal), position) + D);
-			float dos = (glm::dot((normal), tempPos) + D);
-
-			float res = uno * dos;
-			return ((uno * dos) <= 0);
+			return (((glm::dot((normal), position) + D) * (glm::dot((normal), tempPos) + D)) <= 0);
 		};
 
 		void CalculusPostPlaneCollision(glm::vec3 &tempPos, glm::vec3 &tempVel)
@@ -153,7 +155,7 @@ namespace Utils
 
 	class Capsule
 	{
-		enum capsuleCollisions {TOPSPHERE, BOTTOMSPHERE, CILLINDER, NONE };
+		enum capsuleCollisions {TOPSPHERE, BOTTOMSPHERE, CYLLINDER, NONE };
 	public:
 		Sphere topSemiSphere;
 		Sphere bottomSemiSphere;
@@ -173,7 +175,7 @@ namespace Utils
 			float distToBottomSphere;
 			bool collisionTop = false;
 			bool collisionBottom = false;
-			bool collisionCillinder = false;
+			bool collisionCyllinder = false;
 			glm::vec3 AB = topSemiSphere.center - bottomSemiSphere.center;
 			glm::vec3 cross = glm::cross((tempPos - bottomSemiSphere.center), AB);
 			//Calculate the distances to see if we colldie
@@ -192,10 +194,10 @@ namespace Utils
 			}
 			if (distToRect < topSemiSphere.radius || distToRect < bottomSemiSphere.radius)
 			{
-				collisionCillinder = true;
+				collisionCyllinder = true;
 			}
 			//Calculate which distance is the lowest
-			if (collisionTop && collisionBottom && collisionCillinder)
+			if (collisionTop && collisionBottom && collisionCyllinder)
 			{
 				if (distToTopSphere < distToBottomSphere && distToTopSphere < distToRect)
 					return 0;
@@ -215,7 +217,7 @@ namespace Utils
 				else
 					return 3;
 			}
-			else if (collisionTop && collisionCillinder)
+			else if (collisionTop && collisionCyllinder)
 			{
 				if (distToTopSphere < distToRect)
 					return 0;
@@ -224,7 +226,7 @@ namespace Utils
 				else
 					return 3;
 			}
-			else if (collisionBottom && collisionCillinder)
+			else if (collisionBottom && collisionCyllinder)
 			{
 				if (distToBottomSphere < distToRect)
 					return 1;
@@ -245,13 +247,18 @@ namespace Utils
 				case capsuleCollisions::BOTTOMSPHERE:
 					bottomSemiSphere.SphereCollisionCalculus(tempPos, tempVel, index, particle);
 					break;
-				case capsuleCollisions::CILLINDER:
+				case capsuleCollisions::CYLLINDER:
 					break;
 				case capsuleCollisions::NONE:
 					break;
 				default:
 					break;
 			}
+		}
+
+		void CylinderCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
+		{
+
 		}
 	};
 
@@ -275,6 +282,7 @@ namespace Utils
 		 5.f, 10.f,  5.f,
 		-5.f, 10.f,  5.f,
 	};
+	Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f), 1.f);
 	glm::vec3 pointsPlane1[3] = { glm::vec3(-5,0,-5), glm::vec3(5,0,-5),glm::vec3(5,0,5) };  // down
 	glm::vec3 pointsPlane2[3] = { glm::vec3(-5,0,5),  glm::vec3(-5,10,5), glm::vec3(-5,0,-5)};  // front
 	glm::vec3 pointsPlane3[3] = { glm::vec3(-5,0,-5), glm::vec3(-5,10,-5),glm::vec3(5,0,-5) }; //right
@@ -287,12 +295,24 @@ namespace Utils
 
 
 
-void Exemple_GUI() {
+void Exemple_GUI() 
+{
+
 	ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
-	ImGui::SliderFloat("Max Position Ramge", &p_pars.max, 6.f, 10.f);
+	ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
 	ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 0.1f, 10.f);
 	ImGui::SliderFloat3("Director Vector", Utils::standardDirectorVector, 0.f, 1.f);
 	ImGui::SliderFloat3("Starting Velocity", Utils::standardVelocity, -10.f, 10.f);
+	ImGui::Text("SPHERE VARIABLES");
+	ImGui::Checkbox("Render Sphere", &renderSphere);
+	if (ImGui::SliderFloat3("Sphere center", &Utils::sphere.center.x, -5.f, 5.f))
+	{
+		Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+	}
+	if (ImGui::SliderFloat("Sphere radius", &Utils::sphere.radius, 1.f, 3.f))
+	{
+		Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+	}
 }
 
 void Exemple_PhysicsInit() 
@@ -303,7 +323,7 @@ void Exemple_PhysicsInit()
 	s_PS.velocity = new glm::vec3[s_PS.numParticles];
 	s_PS.position = new glm::vec3[s_PS.numParticles];
 	s_PS.timeLeft = new float[s_PS.numParticles];
-	extern bool renderParticles; renderParticles = true;
+	renderParticles = true;
 	LilSpheres::firstParticleIdx = 0;
 	LilSpheres::lifeExpectancy = 1.f;
 	LilSpheres::particleCount = s_PS.numParticles;
@@ -328,7 +348,6 @@ void Exemple_PhysicsInit()
 }
 
 void Exemple_PhysicsUpdate(float dt) {
-	Utils::Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f),  1.f);
 	for (int i = 0; i < s_PS.numParticles; i++) {
 		s_PS.timeLeft[i] -= dt;
 
@@ -345,9 +364,12 @@ void Exemple_PhysicsUpdate(float dt) {
 			 }
 		}
 		//Collision with Sphere
-		if (sphere.hasCollisioned(tempPos))
+		if (renderSphere)
 		{
-			sphere.SphereCollisionCalculus(tempPos, tempVel, i, s_PS);
+			if (Utils::sphere.hasCollisioned(tempPos))
+			{
+				Utils::sphere.SphereCollisionCalculus(tempPos, tempVel, i, s_PS);
+			}
 		}
 		//Collision with Capsule
 
