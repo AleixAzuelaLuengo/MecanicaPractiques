@@ -6,6 +6,22 @@
 
 /////////Forward declarations
 
+namespace {
+	static struct PhysParams {
+		glm::vec3 acceleration;
+		float min = 0.f;
+		float max = 10.f;
+	} p_pars;
+
+	static struct ParticleSystem {
+		glm::vec3 *position;
+		float *timeLeft;
+		int numParticles;
+		glm::vec3 *directorVector;
+		glm::vec3 *velocity;
+	} s_PS;
+}
+
 namespace LilSpheres {
 	extern const int maxParticles;
 	extern int firstParticleIdx;
@@ -60,6 +76,13 @@ namespace Utils
 			float res = uno * dos;
 			return ((uno * dos) <= 0);
 		};
+
+		void CalculusPostPlaneCollision(glm::vec3 &tempPos, glm::vec3 &tempVel)
+		{
+			//Get the next position and velocity and calculate where the particle should be when it bounces
+			tempPos -= 2 * (glm::dot(normal, tempPos) + D) * glm::normalize(normal);
+			tempVel -= 2 * (glm::dot(normal, tempVel)) * glm::normalize(normal);
+		}
 	};
 
 	class Sphere
@@ -81,6 +104,154 @@ namespace Utils
 		bool hasCollisioned(glm::vec3 tempPos)
 		{
 			return glm::distance(tempPos , center) < radius;
+		}
+		Sphere operator=(Sphere rightOperand)
+		{
+			center = rightOperand.center;
+			radius = rightOperand.radius;
+		}
+
+		void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
+		{
+			glm::vec3 normal;
+			float D;
+			float d = glm::distance(tempPos, center);
+			//landa squared
+			float landaSquared = (glm::pow(particle.velocity[index].x, 2)) + (glm::pow(particle.velocity[index].y, 2)) + (glm::pow(particle.velocity[index].z, 2));
+			//landa
+			float landaX = (2 * (particle.position[index].x * -particle.velocity[index].x)) + (2 * (particle.velocity[index].x) * -center.x);
+			float landaY = (2 * (particle.position[index].y * -particle.velocity[index].y)) + (2 * (particle.velocity[index].y) * -center.y);
+			float landaZ = (2 * (particle.position[index].z * -particle.velocity[index].z)) + (2 * (particle.velocity[index].z) * -center.z);
+			float landa = landaX + landaY + landaZ;
+			//independent number
+			float numberX = glm::pow(particle.position[index].x, 2) + glm::pow(-center.x, 2) + (2 * (particle.position[index].x * -center.x));
+			float numberY = glm::pow(particle.position[index].y, 2) + glm::pow(-center.y, 2) + (2 * (particle.position[index].y * -center.y));
+			float numberZ = glm::pow(particle.position[index].z, 2) + glm::pow(-center.z, 2) + (2 * (particle.position[index].z * -center.z));
+			float number = numberX + numberY + numberZ;
+			//2nd grade equations solved
+			float solutionLandaPlus = (-landa + glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
+			float solutionLandaMinus = (-landa - glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
+			//Calculate the 2 point to see which one is the closest one
+			glm::vec3 recPointPlus = particle.position[index] + (solutionLandaPlus * particle.velocity[index]);
+			glm::vec3 recPointMinus = particle.position[index] + (solutionLandaMinus * particle.velocity[index]);
+			if (glm::distance(particle.position[index], recPointPlus) > glm::distance(particle.position[index], recPointMinus))
+			{
+				normal = recPointMinus - center;
+				normal = glm::normalize(normal);
+				D = -((normal.x * recPointMinus.x) + (normal.y * recPointMinus.y) + (normal.z * recPointMinus.z));
+			}
+			else
+			{
+				normal = recPointPlus - center;
+				normal = glm::normalize(normal);
+				D = -((normal.x * recPointPlus.x) + (normal.y * recPointPlus.y) + (normal.z * recPointPlus.z));
+			}
+			tempPos -= 2 * (glm::dot(normal, tempPos) + D) * glm::normalize(normal);
+			tempVel -= 2 * (glm::dot(normal, tempVel)) * glm::normalize(normal);
+		}
+	};
+
+	class Capsule
+	{
+		enum capsuleCollisions {TOPSPHERE, BOTTOMSPHERE, CILLINDER, NONE };
+	public:
+		Sphere topSemiSphere;
+		Sphere bottomSemiSphere;
+		Capsule()
+		{
+			topSemiSphere = Sphere();
+			bottomSemiSphere = Sphere();
+		}
+		Capsule(Sphere top, Sphere bottom)
+		{
+			topSemiSphere = top;
+			bottomSemiSphere = bottom;
+		}
+		int hasCollisioned(glm::vec3 tempPos)
+		{
+			float distToTopSphere;
+			float distToBottomSphere;
+			bool collisionTop = false;
+			bool collisionBottom = false;
+			bool collisionCillinder = false;
+			glm::vec3 AB = topSemiSphere.center - bottomSemiSphere.center;
+			glm::vec3 cross = glm::cross((tempPos - bottomSemiSphere.center), AB);
+			//Calculate the distances to see if we colldie
+			float ABmodule = (glm::sqrt(glm::pow(AB.x, 2) + glm::pow(AB.y, 2) + glm::pow(AB.z, 2)));
+			float crossModule = glm::sqrt(glm::pow(cross.x, 2) + glm::pow(cross.y, 2) + glm::pow(cross.z, 2));
+			float distToRect = crossModule / ABmodule;
+			if (topSemiSphere.hasCollisioned(tempPos))
+			{
+				collisionTop = true;
+				distToTopSphere = glm::distance(tempPos, topSemiSphere.center);
+			}
+			if (bottomSemiSphere.hasCollisioned(tempPos))
+			{
+				collisionBottom = true;
+				distToBottomSphere = glm::distance(tempPos, bottomSemiSphere.center);
+			}
+			if (distToRect < topSemiSphere.radius || distToRect < bottomSemiSphere.radius)
+			{
+				collisionCillinder = true;
+			}
+			//Calculate which distance is the lowest
+			if (collisionTop && collisionBottom && collisionCillinder)
+			{
+				if (distToTopSphere < distToBottomSphere && distToTopSphere < distToRect)
+					return 0;
+				else if (distToBottomSphere < distToTopSphere && distToBottomSphere < distToRect)
+					return 1;
+				else if (distToRect < distToBottomSphere && distToRect < distToTopSphere)
+					return 2;
+				else
+					return 3;
+			}
+			else if (collisionTop && collisionBottom)
+			{
+				if (distToTopSphere < distToBottomSphere)
+					return 0;
+				else if (distToBottomSphere < distToTopSphere)
+					return 1;
+				else
+					return 3;
+			}
+			else if (collisionTop && collisionCillinder)
+			{
+				if (distToTopSphere < distToRect)
+					return 0;
+				else if (distToRect < distToTopSphere)
+					return 2;
+				else
+					return 3;
+			}
+			else if (collisionBottom && collisionCillinder)
+			{
+				if (distToBottomSphere < distToRect)
+					return 1;
+				else if (distToRect < distToBottomSphere)
+					return 2;
+				else
+					return 3;
+			}
+		}
+
+		void CapsuleCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
+		{
+			switch (hasCollisioned(tempPos))
+			{
+				case capsuleCollisions::TOPSPHERE:
+					topSemiSphere.SphereCollisionCalculus(tempPos, tempVel, index, particle);
+					break;
+				case capsuleCollisions::BOTTOMSPHERE:
+					bottomSemiSphere.SphereCollisionCalculus(tempPos, tempVel, index, particle);
+					break;
+				case capsuleCollisions::CILLINDER:
+					break;
+				case capsuleCollisions::NONE:
+					break;
+				default:
+					break;
+			}
 		}
 	};
 
@@ -113,23 +284,8 @@ namespace Utils
 
 }
 
-namespace {
-	static struct PhysParams {
-		glm::vec3 acceleration;
-		float min = 0.f;
-		float max = 10.f;
-	} p_pars;
 
-	static struct ParticleSystem {
-		glm::vec3 *position;
-		float *timeLeft;
-		int numParticles;
-		glm::vec3 *directorVector;
-		glm::vec3 *velocity;
-	} s_PS;
-}
 
-void CalculusPostPlaneCollision(glm::vec3 &tempPos, glm::vec3 &tempVel, Utils::Plane plane);
 
 void Exemple_GUI() {
 	ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
@@ -171,57 +327,6 @@ void Exemple_PhysicsInit()
 	LilSpheres::updateParticles(0, s_PS.numParticles, &(s_PS.position[0].x));
 }
 
-void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, Utils::Sphere sphere)
-{
-	glm::vec3 normal;
-	float D;
-	float d = glm::distance(tempPos, sphere.center);
-	//landa squared
-	float landaSquared = (glm::pow(s_PS.velocity[index].x, 2)) + (glm::pow(s_PS.velocity[index].y, 2)) + (glm::pow(s_PS.velocity[index].z, 2));
-	//landa
-	float landaX = (2 * (s_PS.position[index].x * -s_PS.velocity[index].x)) + (2 * (s_PS.velocity[index].x) * -sphere.center.x);
-	float landaY = (2 * (s_PS.position[index].y * -s_PS.velocity[index].y)) + (2 * (s_PS.velocity[index].y) * -sphere.center.y);
-	float landaZ = (2 * (s_PS.position[index].z * -s_PS.velocity[index].z)) + (2 * (s_PS.velocity[index].z) * -sphere.center.z);
-	float landa = landaX + landaY + landaZ;
-	//independent number
-	float numberX = glm::pow(s_PS.position[index].x, 2) + glm::pow(-sphere.center.x, 2) + (2 * (s_PS.position[index].x * -sphere.center.x));
-	float numberY = glm::pow(s_PS.position[index].y, 2) + glm::pow(-sphere.center.y, 2) + (2 * (s_PS.position[index].y * -sphere.center.y));
-	float numberZ = glm::pow(s_PS.position[index].z, 2) + glm::pow(-sphere.center.z, 2) + (2 * (s_PS.position[index].z * -sphere.center.z));
-	float number = numberX + numberY + numberZ;
-	//2nd grade equations solved
-	float numberEquation = glm::pow(landa, 2) + (-4 * (landaSquared) * number);
-	float arrelcuadrada = glm::sqrt(numberEquation);
-	float solutionLandaPlus = (-landa + arrelcuadrada) / (2 * landaSquared);
-	float solutionLandaMinus = (-landa - arrelcuadrada) / (2 * landaSquared);
-	//Calculate the 2 point to see which one is the closest one
-	glm::vec3 recPointPlus = s_PS.position[index] + (solutionLandaPlus * s_PS.velocity[index]);
-	glm::vec3 recPointMinus = s_PS.position[index] + (solutionLandaMinus * s_PS.velocity[index]);
-	if (glm::distance(s_PS.position[index], recPointPlus) > glm::distance(s_PS.position[index], recPointMinus))
-	{
-		normal = recPointMinus - sphere.center;
-		normal = glm::normalize(normal);
-		D = -((normal.x * recPointMinus.x) + (normal.y * recPointMinus.y) + (normal.z * recPointMinus.z));
-	}
-	else
-	{
-		normal = recPointPlus - sphere.center;
-		normal = glm::normalize(normal);
-		D = -((normal.x * recPointPlus.x) + (normal.y * recPointPlus.y) + (normal.z * recPointPlus.z));
-	}
-	tempPos -= 2 * (glm::dot(normal, tempPos) + D) * glm::normalize(normal);
-	tempVel -= 2 * (glm::dot(normal, tempVel)) * glm::normalize(normal);
-}
-
-void CalculusPostPlaneCollision(glm::vec3 &tempPos, glm::vec3 &tempVel, Utils::Plane plane)
-{
-	//Get the next position and velocity and calculate where the particle should be when it bounces
-	tempPos -=  2 * (glm::dot(plane.normal, tempPos) + plane.D) * glm::normalize(plane.normal);
-	tempVel -=  2 * (glm::dot(plane.normal, tempVel)) * glm::normalize(plane.normal);
-}
-
-
-
-
 void Exemple_PhysicsUpdate(float dt) {
 	Utils::Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f),  1.f);
 	for (int i = 0; i < s_PS.numParticles; i++) {
@@ -232,18 +337,20 @@ void Exemple_PhysicsUpdate(float dt) {
 		glm::vec3 tempVel = s_PS.velocity[i] + (dt * p_pars.acceleration);
 		
 		//Check collisions with all 6 planes in the cube 
-		/*for (int j = 0; j < 6; j++) {
+		for (int j = 0; j < 6; j++) {
 			 if(Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
 			 {
 				 //Compute the collisions and save them in tempPos and tempVel
-				 CalculusPostPlaneCollision(tempPos,tempVel,Utils::cubePlaneCollision[j]);
+				 Utils::cubePlaneCollision[j].CalculusPostPlaneCollision(tempPos,tempVel);
 			 }
-		}*/
-
+		}
+		//Collision with Sphere
 		if (sphere.hasCollisioned(tempPos))
 		{
-			SphereCollisionCalculus(tempPos, tempVel, i, sphere);
+			sphere.SphereCollisionCalculus(tempPos, tempVel, i, s_PS);
 		}
+		//Collision with Capsule
+
 		//Change the position.
 		//When we compute the collisions, all these changes are saved in tempPos and tempVel,
 		//so these are the final positions after all collisions are computed.
