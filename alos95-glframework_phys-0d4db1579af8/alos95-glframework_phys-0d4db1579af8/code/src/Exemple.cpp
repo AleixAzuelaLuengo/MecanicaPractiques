@@ -129,7 +129,7 @@ namespace Utils
 			float numberX = glm::pow(particle.position[index].x, 2) + glm::pow(-center.x, 2) + (2 * (particle.position[index].x * -center.x));
 			float numberY = glm::pow(particle.position[index].y, 2) + glm::pow(-center.y, 2) + (2 * (particle.position[index].y * -center.y));
 			float numberZ = glm::pow(particle.position[index].z, 2) + glm::pow(-center.z, 2) + (2 * (particle.position[index].z * -center.z));
-			float number = numberX + numberY + numberZ;
+			float number = numberX + numberY + numberZ - glm::pow(radius, 2);
 			//2nd grade equations solved
 			float solutionLandaPlus = (-landa + glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
 			float solutionLandaMinus = (-landa - glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
@@ -148,8 +148,8 @@ namespace Utils
 				normal = glm::normalize(normal);
 				D = -((normal.x * recPointPlus.x) + (normal.y * recPointPlus.y) + (normal.z * recPointPlus.z));
 			}
-			tempPos -= 2 * (glm::dot(normal, tempPos) + D) * glm::normalize(normal);
-			tempVel -= 2 * (glm::dot(normal, tempVel)) * glm::normalize(normal);
+			tempPos -= 2 * (glm::dot(normal, tempPos) + D) * (normal);
+			tempVel -= 2 * (glm::dot(normal, tempVel)) * (normal);
 		}
 	};
 
@@ -176,12 +176,13 @@ namespace Utils
 			bool collisionTop = false;
 			bool collisionBottom = false;
 			bool collisionCyllinder = false;
-			glm::vec3 AB = topSemiSphere.center - bottomSemiSphere.center;
-			glm::vec3 cross = glm::cross((tempPos - bottomSemiSphere.center), AB);
-			//Calculate the distances to see if we colldie
-			float ABmodule = (glm::sqrt(glm::pow(AB.x, 2) + glm::pow(AB.y, 2) + glm::pow(AB.z, 2)));
-			float crossModule = glm::sqrt(glm::pow(cross.x, 2) + glm::pow(cross.y, 2) + glm::pow(cross.z, 2));
-			float distToRect = crossModule / ABmodule;
+			//glm::vec3 AB = topSemiSphere.center - bottomSemiSphere.center;
+			//glm::vec3 cross = glm::cross((tempPos - bottomSemiSphere.center), AB);
+			////Calculate the distances to see if we colldie
+			//float ABmodule = (glm::sqrt(glm::pow(AB.x, 2) + glm::pow(AB.y, 2) + glm::pow(AB.z, 2)));
+			//float crossModule = glm::sqrt(glm::pow(cross.x, 2) + glm::pow(cross.y, 2) + glm::pow(cross.z, 2));
+			glm::vec3 closestPoint = getClosestPoint(topSemiSphere.center, bottomSemiSphere.center, tempPos);
+			float distToRect = glm::distance(closestPoint,tempPos);
 			if (topSemiSphere.hasCollisioned(tempPos))
 			{
 				collisionTop = true;
@@ -248,8 +249,10 @@ namespace Utils
 					bottomSemiSphere.SphereCollisionCalculus(tempPos, tempVel, index, particle);
 					break;
 				case capsuleCollisions::CYLLINDER:
+					CylinderCollisionCalculus(tempPos, tempVel, index, particle);
 					break;
 				case capsuleCollisions::NONE:
+
 					break;
 				default:
 					break;
@@ -258,7 +261,33 @@ namespace Utils
 
 		void CylinderCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
 		{
+			glm::vec3 closestPoint = getClosestPoint(topSemiSphere.center, bottomSemiSphere.center, tempPos);
+			glm::vec3 collisionPoint = topSemiSphere.radius * glm::vec3(tempPos.x - closestPoint.x, tempPos.y - closestPoint.y, tempPos.z - closestPoint.z);
+			
+			
+		}
 
+		glm::vec3 getClosestPoint(glm::vec3 A, glm::vec3 B, glm::vec3 particlePosition)
+		{
+			glm::vec3 AP = particlePosition - A;       //Vector from A to P   
+			glm::vec3 AB = B - A;       //Vector from A to B  
+
+			float magnitudeAB = pow(AB.x,2) + pow(AB.y, 2) + pow(AB.z, 2);     //Magnitude of AB vector (it's length squared)     
+			float ABAPproduct = glm::dot(AP, AB);		//The DOT product of AP and AB     
+			float distance = ABAPproduct / magnitudeAB; //The normalized "distance" from a to your closest point  
+
+			if (distance < 0)     //Check if P projection is over vectorAB     
+			{
+				return A;
+
+			}
+			else if (distance > 1) {
+				return B;
+			}
+			else
+			{
+				return A + AB * distance;
+			}
 		}
 	};
 
@@ -297,21 +326,28 @@ namespace Utils
 
 void Exemple_GUI() 
 {
-
-	ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
-	ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
-	ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 0.1f, 10.f);
-	ImGui::SliderFloat3("Director Vector", Utils::standardDirectorVector, 0.f, 1.f);
-	ImGui::SliderFloat3("Starting Velocity", Utils::standardVelocity, -10.f, 10.f);
-	ImGui::Text("SPHERE VARIABLES");
-	ImGui::Checkbox("Render Sphere", &renderSphere);
-	if (ImGui::SliderFloat3("Sphere center", &Utils::sphere.center.x, -5.f, 5.f))
+	if (ImGui::CollapsingHeader("PARTICLE VARIABLES"))
 	{
-		Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+		ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
+		ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
+		ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 0.1f, 10.f);
+		ImGui::SliderFloat3("Starting Velocity", Utils::standardVelocity, -10.f, 10.f);
 	}
-	if (ImGui::SliderFloat("Sphere radius", &Utils::sphere.radius, 1.f, 3.f))
+	if (ImGui::CollapsingHeader("SPHERE VARIABLES"))
 	{
-		Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+		ImGui::Checkbox("Render Sphere", &renderSphere);
+		if (ImGui::SliderFloat3("Sphere center", &Utils::sphere.center.x, -5.f, 5.f))
+		{
+			Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+		}
+		if (ImGui::SliderFloat("Sphere radius", &Utils::sphere.radius, 1.f, 3.f))
+		{
+			Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+		}
+	}
+	if(ImGui::CollapsingHeader("CAPSULE VARIABLES"))
+	{ 
+		ImGui::Checkbox("Render Capsule", &renderCapsule);
 	}
 }
 
