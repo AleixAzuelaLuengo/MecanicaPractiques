@@ -338,9 +338,7 @@ void Exemple_GUI()
 {
 	if (ImGui::CollapsingHeader("PARTICLE VARIABLES"))
 	{
-		if (ImGui::SliderFloat("Emission Rate (particles / second)", &s_PS.emissionRate, 100.f, 400.f)) {
-			s_PS.updateParticlesPerFrame(s_PS.emissionRate);
-		}
+		(ImGui::SliderFloat("Emission Rate (particles / second)", &s_PS.emissionRate, 100.f, 400.f));
 		ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
 		ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
 		ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 1.f, 10.f);
@@ -461,9 +459,9 @@ void Exemple_PhysicsUpdate(float dt) {
 	}
 	LilSpheres::particleCount = s_PS.numParticles;
 	LilSpheres::updateParticles(0, s_PS.numParticles, &(particlePosition[0].x));
+	delete[] particlePosition;
 }
 
 void Exemple_PhysicsCleanup() {
-	delete[] particlePosition;
 }
 
