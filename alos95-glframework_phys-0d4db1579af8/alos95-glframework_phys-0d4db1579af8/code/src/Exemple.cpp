@@ -14,6 +14,7 @@ extern bool renderCube;
 namespace {
 	static struct PhysParams {
 		glm::vec3 acceleration;
+		float pPos[3] = { 2.5f, 1.f, 2.5f };
 		float min = 0.f;
 		float max = 10.f;
 	} p_pars;
@@ -107,11 +108,7 @@ namespace Utils
 		{
 			return glm::distance(tempPos , center) < radius;
 		}
-		Sphere operator=(Sphere rightOperand)
-		{
-			center = rightOperand.center;
-			radius = rightOperand.radius;
-		}
+		
 
 		void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
 		{
@@ -159,30 +156,37 @@ namespace Utils
 	public:
 		Sphere topSemiSphere;
 		Sphere bottomSemiSphere;
+
 		Capsule()
 		{
 			topSemiSphere = Sphere();
 			bottomSemiSphere = Sphere();
 		}
+
 		Capsule(Sphere top, Sphere bottom)
 		{
 			topSemiSphere = top;
 			bottomSemiSphere = bottom;
 		}
-		int hasCollisioned(glm::vec3 tempPos)
+
+		bool hasCollisioned(glm::vec3 tempPos)
 		{
 			float distToTopSphere;
 			float distToBottomSphere;
 			bool collisionTop = false;
 			bool collisionBottom = false;
 			bool collisionCyllinder = false;
-			//glm::vec3 AB = topSemiSphere.center - bottomSemiSphere.center;
-			//glm::vec3 cross = glm::cross((tempPos - bottomSemiSphere.center), AB);
+			//OPTION A
 			////Calculate the distances to see if we colldie
-			//float ABmodule = (glm::sqrt(glm::pow(AB.x, 2) + glm::pow(AB.y, 2) + glm::pow(AB.z, 2)));
-			//float crossModule = glm::sqrt(glm::pow(cross.x, 2) + glm::pow(cross.y, 2) + glm::pow(cross.z, 2));
+			glm::vec3 AB = topSemiSphere.center - bottomSemiSphere.center;
+			glm::vec3 cross = glm::cross((tempPos - bottomSemiSphere.center), AB);
+			float ABmodule = (glm::sqrt(glm::pow(AB.x, 2) + glm::pow(AB.y, 2) + glm::pow(AB.z, 2)));
+			float crossModule = glm::sqrt(glm::pow(cross.x, 2) + glm::pow(cross.y, 2) + glm::pow(cross.z, 2));
+			float distToRect = crossModule/ ABmodule;
+			
+			/*//OPTION B
 			glm::vec3 closestPoint = getClosestPoint(topSemiSphere.center, bottomSemiSphere.center, tempPos);
-			float distToRect = glm::distance(closestPoint,tempPos);
+			float distToRect = glm::distance(closestPoint,tempPos);*/
 			if (topSemiSphere.hasCollisioned(tempPos))
 			{
 				collisionTop = true;
@@ -198,73 +202,74 @@ namespace Utils
 				collisionCyllinder = true;
 			}
 			//Calculate which distance is the lowest
-			if (collisionTop && collisionBottom && collisionCyllinder)
-			{
-				if (distToTopSphere < distToBottomSphere && distToTopSphere < distToRect)
-					return 0;
-				else if (distToBottomSphere < distToTopSphere && distToBottomSphere < distToRect)
-					return 1;
-				else if (distToRect < distToBottomSphere && distToRect < distToTopSphere)
-					return 2;
-				else
-					return 3;
-			}
-			else if (collisionTop && collisionBottom)
-			{
-				if (distToTopSphere < distToBottomSphere)
-					return 0;
-				else if (distToBottomSphere < distToTopSphere)
-					return 1;
-				else
-					return 3;
-			}
-			else if (collisionTop && collisionCyllinder)
+			if (collisionTop && collisionCyllinder)
 			{
 				if (distToTopSphere < distToRect)
-					return 0;
+					return true;
 				else if (distToRect < distToTopSphere)
-					return 2;
+					return true;
 				else
-					return 3;
+					return false;
 			}
 			else if (collisionBottom && collisionCyllinder)
 			{
 				if (distToBottomSphere < distToRect)
-					return 1;
+					return true;
 				else if (distToRect < distToBottomSphere)
-					return 2;
+					return true;
 				else
-					return 3;
+					return false;
 			}
+			else if (collisionTop) 
+				return true;
+			else if (collisionBottom) 
+				return true;
+			else if (collisionCyllinder) 
+				return true;
+			else return false;
 		}
 
 		void CapsuleCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
 		{
-			switch (hasCollisioned(tempPos))
+			if(hasCollisioned(tempPos))
 			{
-				case capsuleCollisions::TOPSPHERE:
-					topSemiSphere.SphereCollisionCalculus(tempPos, tempVel, index, particle);
-					break;
-				case capsuleCollisions::BOTTOMSPHERE:
-					bottomSemiSphere.SphereCollisionCalculus(tempPos, tempVel, index, particle);
-					break;
-				case capsuleCollisions::CYLLINDER:
-					CylinderCollisionCalculus(tempPos, tempVel, index, particle);
-					break;
-				case capsuleCollisions::NONE:
-
-					break;
-				default:
-					break;
+				glm::vec3 closestPoint = getClosestPoint(topSemiSphere.center, bottomSemiSphere.center, tempPos);
+				glm::vec3 normal;
+				float D;
+				float d = glm::distance(tempPos, closestPoint);
+				//landa squared
+				float landaSquared = (glm::pow(particle.velocity[index].x, 2)) + (glm::pow(particle.velocity[index].y, 2)) + (glm::pow(particle.velocity[index].z, 2));
+				//landa
+				float landaX = (2 * (particle.position[index].x * -particle.velocity[index].x)) + (2 * (particle.velocity[index].x) * -closestPoint.x);
+				float landaY = (2 * (particle.position[index].y * -particle.velocity[index].y)) + (2 * (particle.velocity[index].y) * -closestPoint.y);
+				float landaZ = (2 * (particle.position[index].z * -particle.velocity[index].z)) + (2 * (particle.velocity[index].z) * -closestPoint.z);
+				float landa = landaX + landaY + landaZ;
+				//independent number
+				float numberX = glm::pow(particle.position[index].x, 2) + glm::pow(-closestPoint.x, 2) + (2 * (particle.position[index].x * -closestPoint.x));
+				float numberY = glm::pow(particle.position[index].y, 2) + glm::pow(-closestPoint.y, 2) + (2 * (particle.position[index].y * -closestPoint.y));
+				float numberZ = glm::pow(particle.position[index].z, 2) + glm::pow(-closestPoint.z, 2) + (2 * (particle.position[index].z * -closestPoint.z));
+				float number = numberX + numberY + numberZ - glm::pow(topSemiSphere.radius, 2);
+				//2nd grade equations solved
+				float solutionLandaPlus = (-landa + glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
+				float solutionLandaMinus = (-landa - glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
+				//Calculate the 2 point to see which one is the closest one
+				glm::vec3 recPointPlus = particle.position[index] + (solutionLandaPlus * particle.velocity[index]);
+				glm::vec3 recPointMinus = particle.position[index] + (solutionLandaMinus * particle.velocity[index]);
+				if (glm::distance(particle.position[index], recPointPlus) > glm::distance(particle.position[index], recPointMinus))
+				{
+					normal = recPointMinus - closestPoint;
+					normal = glm::normalize(normal);
+					D = -((normal.x * recPointMinus.x) + (normal.y * recPointMinus.y) + (normal.z * recPointMinus.z));
+				}
+				else
+				{
+					normal = recPointPlus - closestPoint;
+					normal = glm::normalize(normal);
+					D = -((normal.x * recPointPlus.x) + (normal.y * recPointPlus.y) + (normal.z * recPointPlus.z));
+				}
+				tempPos -= 2 * (glm::dot(normal, tempPos) + D) * (normal);
+				tempVel -= 2 * (glm::dot(normal, tempVel)) * (normal);
 			}
-		}
-
-		void CylinderCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
-		{
-			glm::vec3 closestPoint = getClosestPoint(topSemiSphere.center, bottomSemiSphere.center, tempPos);
-			glm::vec3 collisionPoint = topSemiSphere.radius * glm::vec3(tempPos.x - closestPoint.x, tempPos.y - closestPoint.y, tempPos.z - closestPoint.z);
-			
-			
 		}
 
 		glm::vec3 getClosestPoint(glm::vec3 A, glm::vec3 B, glm::vec3 particlePosition)
@@ -277,17 +282,11 @@ namespace Utils
 			float distance = ABAPproduct / magnitudeAB; //The normalized "distance" from a to your closest point  
 
 			if (distance < 0)     //Check if P projection is over vectorAB     
-			{
 				return A;
-
-			}
-			else if (distance > 1) {
+			else if (distance > 1) 
 				return B;
-			}
 			else
-			{
 				return A + AB * distance;
-			}
 		}
 	};
 
@@ -311,7 +310,11 @@ namespace Utils
 		 5.f, 10.f,  5.f,
 		-5.f, 10.f,  5.f,
 	};
+	//Capsula
+	Capsule capsule = Utils::Capsule(Utils::Sphere(glm::vec3(-3.f, 2.f, -2.f), 1.f), Utils::Sphere(glm::vec3(-4.f, 2.f, 2.f), 1.f));
+	//Esfera
 	Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f), 1.f);
+	//Cub
 	glm::vec3 pointsPlane1[3] = { glm::vec3(-5,0,-5), glm::vec3(5,0,-5),glm::vec3(5,0,5) };  // down
 	glm::vec3 pointsPlane2[3] = { glm::vec3(-5,0,5),  glm::vec3(-5,10,5), glm::vec3(-5,0,-5)};  // front
 	glm::vec3 pointsPlane3[3] = { glm::vec3(-5,0,-5), glm::vec3(-5,10,-5),glm::vec3(5,0,-5) }; //right
@@ -406,6 +409,10 @@ void Exemple_PhysicsUpdate(float dt) {
 			{
 				Utils::sphere.SphereCollisionCalculus(tempPos, tempVel, i, s_PS);
 			}
+		}
+		if (renderCapsule)
+		{
+			Utils::capsule.CapsuleCollisionCalculus(tempPos, tempVel, i, s_PS);
 		}
 		//Collision with Capsule
 
