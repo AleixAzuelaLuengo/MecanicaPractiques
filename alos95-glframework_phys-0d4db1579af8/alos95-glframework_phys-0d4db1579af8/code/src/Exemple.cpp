@@ -3,6 +3,8 @@
 #include <glm\glm.hpp>
 #include <glm\gtc\matrix_transform.hpp>
 #include <cstdio>
+#include <stdlib.h>
+#include <vector>
 
 /////////Forward declarations
 extern bool renderSphere;
@@ -10,7 +12,7 @@ extern bool renderCapsule;
 extern bool renderParticles;
 extern bool renderCloth;
 extern bool renderCube;
-
+glm::vec3 *particlePosition;
 namespace {
 	static struct PhysParams {
 		glm::vec3 acceleration;
@@ -20,11 +22,14 @@ namespace {
 	} p_pars;
 
 	static struct ParticleSystem {
-		glm::vec3 *position;
-		float *timeLeft;
+		float emissionRate = 100;
+		std::vector<glm::vec3> position;
+		std::vector<float> timeLeft;
 		int numParticles;
-		glm::vec3 *directorVector;
-		glm::vec3 *velocity;
+		int particlesPerFrame;
+		std::vector<glm::vec3> directorVector;
+		std::vector<glm::vec3> velocity;
+		void updateParticlesPerFrame(int newN) { particlesPerFrame = newN; };
 	} s_PS;
 }
 
@@ -41,7 +46,9 @@ namespace LilSpheres {
 namespace Sphere {
 	extern void updateSphere(glm::vec3 pos, float radius = 1.f);
 }
-
+namespace Capsule {
+	extern void updateCapsule(glm::vec3 posA, glm::vec3 posB, float radius = 1.f);
+}
 namespace Utils 
 {
 	class Plane
@@ -311,7 +318,7 @@ namespace Utils
 		-5.f, 10.f,  5.f,
 	};
 	//Capsula
-	Capsule capsule = Utils::Capsule(Utils::Sphere(glm::vec3(-3.f, 2.f, -2.f), 1.f), Utils::Sphere(glm::vec3(-4.f, 2.f, 2.f), 1.f));
+	Capsule capsule = Utils::Capsule(Utils::Sphere(glm::vec3(-3.f, 2.f, 0.f), 1.f), Utils::Sphere(glm::vec3(3.f, 2.f, 0.f), 1.f));
 	//Esfera
 	Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f), 1.f);
 	//Cub
@@ -331,9 +338,12 @@ void Exemple_GUI()
 {
 	if (ImGui::CollapsingHeader("PARTICLE VARIABLES"))
 	{
+		if (ImGui::SliderFloat("Emission Rate (particles / second)", &s_PS.emissionRate, 100.f, 400.f)) {
+			s_PS.updateParticlesPerFrame(s_PS.emissionRate);
+		}
 		ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
 		ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
-		ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 0.1f, 10.f);
+		ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 1.f, 10.f);
 		ImGui::SliderFloat3("Starting Velocity", Utils::standardVelocity, -10.f, 10.f);
 	}
 	if (ImGui::CollapsingHeader("SPHERE VARIABLES"))
@@ -351,49 +361,59 @@ void Exemple_GUI()
 	if(ImGui::CollapsingHeader("CAPSULE VARIABLES"))
 	{ 
 		ImGui::Checkbox("Render Capsule", &renderCapsule);
+		if (ImGui::SliderFloat3("Capsule Top Sphere center", &Utils::capsule.topSemiSphere.center.x, -5.f, 5.f))
+		{
+			Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
+		}
+		if (ImGui::SliderFloat3("Capsule Bottom Sphere center", &Utils::capsule.bottomSemiSphere.center.x, -5.f, 5.f))
+		{
+			Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
+		}
+		if (ImGui::SliderFloat("Capsule Radius", &Utils::capsule.topSemiSphere.radius, 1.f, 5.f))
+		{
+			Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
+		}
+		
 	}
 }
 
 void Exemple_PhysicsInit() 
 {
+	Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
 	p_pars.acceleration = glm::vec3(0, -9.81, 0);
-	s_PS.numParticles = 100;
-	s_PS.directorVector = new glm::vec3[s_PS.numParticles];
-	s_PS.velocity = new glm::vec3[s_PS.numParticles];
-	s_PS.position = new glm::vec3[s_PS.numParticles];
-	s_PS.timeLeft = new float[s_PS.numParticles];
+	s_PS.particlesPerFrame = glm::round(s_PS.emissionRate/1000 *33.3f);
+	s_PS.numParticles = 0;
 	renderParticles = true;
 	LilSpheres::firstParticleIdx = 0;
 	LilSpheres::lifeExpectancy = 1.f;
-	LilSpheres::particleCount = s_PS.numParticles;
-	for (int i = 0; i < s_PS.numParticles; i++)
-	{
-		s_PS.directorVector[i] = Utils::floatToVec(Utils::standardDirectorVector);
-		s_PS.velocity[i] = Utils::floatToVec(Utils::standardVelocity);
-		s_PS.timeLeft[i] = LilSpheres::lifeExpectancy;
-		float x = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-		float y = p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-		float z = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-		//printf("Creating particle with position %.2f, %.2f, %.2f\n", x, y, z);
-		s_PS.position[i] = glm::vec3(x, y, z);
-	}
 	Utils::cubePlaneCollision[0] = Utils::Plane(Utils::pointsPlane1[0], Utils::pointsPlane1[1], Utils::pointsPlane1[2]);
 	Utils::cubePlaneCollision[1] = Utils::Plane(Utils::pointsPlane2[0], Utils::pointsPlane2[1], Utils::pointsPlane2[2]);
 	Utils::cubePlaneCollision[2] = Utils::Plane(Utils::pointsPlane3[0], Utils::pointsPlane3[1], Utils::pointsPlane3[2]);
 	Utils::cubePlaneCollision[3] = Utils::Plane(Utils::pointsPlane4[0], Utils::pointsPlane4[1], Utils::pointsPlane4[2]);
 	Utils::cubePlaneCollision[4] = Utils::Plane(Utils::pointsPlane5[0], Utils::pointsPlane5[1], Utils::pointsPlane5[2]);
 	Utils::cubePlaneCollision[5] = Utils::Plane(Utils::pointsPlane6[0], Utils::pointsPlane6[1], Utils::pointsPlane6[2]);
-	LilSpheres::updateParticles(0, s_PS.numParticles, &(s_PS.position[0].x));
 }
 
 void Exemple_PhysicsUpdate(float dt) {
+	s_PS.particlesPerFrame = glm::round(s_PS.emissionRate / 1000 * 33.3f);
+	int temp = s_PS.numParticles;
+	for (int i = s_PS.numParticles; i < s_PS.particlesPerFrame + temp; i++)
+	{
+		s_PS.numParticles++;
+		s_PS.directorVector.push_back(Utils::floatToVec(Utils::standardDirectorVector));
+		s_PS.velocity.push_back(Utils::floatToVec(Utils::standardVelocity));
+		s_PS.timeLeft.push_back(LilSpheres::lifeExpectancy);
+		float x = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
+		float y = p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
+		float z = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
+		//printf("Creating particle with position %.2f, %.2f, %.2f\n", x, y, z);
+		s_PS.position.push_back(glm::vec3(x, y, z));
+	}
 	for (int i = 0; i < s_PS.numParticles; i++) {
 		s_PS.timeLeft[i] -= dt;
-
 		//Calculate next position and next velocity
 		glm::vec3 tempPos = s_PS.position[i] + (dt * (s_PS.velocity[i]));
 		glm::vec3 tempVel = s_PS.velocity[i] + (dt * p_pars.acceleration);
-		
 		//Check collisions with all 6 planes in the cube 
 		for (int j = 0; j < 6; j++) {
 			 if(Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
@@ -410,11 +430,11 @@ void Exemple_PhysicsUpdate(float dt) {
 				Utils::sphere.SphereCollisionCalculus(tempPos, tempVel, i, s_PS);
 			}
 		}
+		//Collision with Capsule
 		if (renderCapsule)
 		{
 			Utils::capsule.CapsuleCollisionCalculus(tempPos, tempVel, i, s_PS);
 		}
-		//Collision with Capsule
 
 		//Change the position.
 		//When we compute the collisions, all these changes are saved in tempPos and tempVel,
@@ -426,20 +446,24 @@ void Exemple_PhysicsUpdate(float dt) {
 		//Check life of the particle
 		if (s_PS.timeLeft[i] < 0)
 		{
-			s_PS.directorVector[i] = Utils::floatToVec(Utils::standardDirectorVector);
-			s_PS.velocity[i] = Utils::floatToVec(Utils::standardVelocity);
-			s_PS.timeLeft[i] = LilSpheres::lifeExpectancy;
-			float x = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-			float y = p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-			float z = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-			//printf("Particle Died, creating new particle with position %.2f, %.2f, %.2f\n", x, y, z);
-			s_PS.position[i] = glm::vec3(x, y, z);
+			s_PS.numParticles--;
+			s_PS.directorVector.erase(s_PS.directorVector.begin() + i);
+			s_PS.position.erase(s_PS.position.begin() + i);
+			s_PS.velocity.erase(s_PS.velocity.begin() + i);
+			s_PS.timeLeft.erase(s_PS.timeLeft.begin() + i);
+			i--;
 		}
 	}
-	LilSpheres::updateParticles(0, s_PS.numParticles, &(s_PS.position[0].x));
+	particlePosition = new glm::vec3[s_PS.numParticles];
+	for (int i = 0; i < s_PS.numParticles; i++) 
+	{
+		particlePosition[i] = s_PS.position[i];
+	}
+	LilSpheres::particleCount = s_PS.numParticles;
+	LilSpheres::updateParticles(0, s_PS.numParticles, &(particlePosition[0].x));
 }
 
 void Exemple_PhysicsCleanup() {
-	delete[] s_PS.position;
+	delete[] particlePosition;
 }
 
