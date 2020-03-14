@@ -12,7 +12,17 @@ extern bool renderCapsule;
 extern bool renderParticles;
 extern bool renderCloth;
 extern bool renderCube;
+
+//Spawning particles variables
+extern const char* items[] = { "Fountain","Waterfall" };
+static const char* current_item = items[0];
+
+glm::vec3 spawningPos;
+float directorVec[]{ 1,1,1 };
+int coneRadius = 45;
+
 glm::vec3 *particlePosition;
+
 namespace {
 	static struct PhysParams {
 		glm::vec3 acceleration;
@@ -29,6 +39,7 @@ namespace {
 		int particlesPerFrame;
 		std::vector<glm::vec3> directorVector;
 		std::vector<glm::vec3> velocity;
+
 		void updateParticlesPerFrame(int newN) { particlesPerFrame = newN; };
 	} s_PS;
 }
@@ -42,7 +53,6 @@ namespace LilSpheres {
 	extern glm::vec3 directorVector;
 	extern glm::vec3 velocity;
 }
-
 namespace Sphere {
 	extern void updateSphere(glm::vec3 pos, float radius = 1.f);
 }
@@ -338,12 +348,44 @@ void Exemple_GUI()
 {
 	if (ImGui::CollapsingHeader("PARTICLE VARIABLES"))
 	{
+		if (ImGui::BeginCombo("Spawning Type", current_item))
+		{
+			for (int n = 0; n < IM_ARRAYSIZE(items); n++)
+			{
+				bool is_selected = (current_item == items[n]);
+				if (ImGui::Selectable(items[n], is_selected))
+					current_item = items[n];
+				if (is_selected)
+					ImGui::SetItemDefaultFocus();
+			}
+
+			ImGui::EndCombo();
+		}
+		if (current_item == items[0]) // fountain
+		{
+			ImGui::SliderFloat3("Starting position", &spawningPos.x , -10.f, 10.f);
+			ImGui::SliderFloat3("Director vector", Utils::standardDirectorVector , 0.f, 1.f);
+			ImGui::SliderInt("Cone angle", &coneRadius, 1, 65);
+		}
+		else if (current_item == items[1]) //waterfall
+		{
+
+		}
+
+
+		ImGui::Spacing();
+		ImGui::Spacing();
+		ImGui::Spacing();
+		ImGui::Spacing();
+		ImGui::Spacing();
+
 		(ImGui::SliderFloat("Emission Rate (particles / second)", &s_PS.emissionRate, 100.f, 400.f));
 		ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
 		ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
 		ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 1.f, 10.f);
-		ImGui::SliderFloat3("Starting Velocity", Utils::standardVelocity, -10.f, 10.f);
+		ImGui::SliderFloat3("Starting Velocity", Utils::standardVelocity, -50.f, 50.f);
 	}
+
 	if (ImGui::CollapsingHeader("SPHERE VARIABLES"))
 	{
 		ImGui::Checkbox("Render Sphere", &renderSphere);
@@ -398,12 +440,37 @@ void Exemple_PhysicsUpdate(float dt) {
 	for (int i = s_PS.numParticles; i < s_PS.particlesPerFrame + temp; i++)
 	{
 		s_PS.numParticles++;
+		float x, y, z;
+
 		s_PS.directorVector.push_back(Utils::floatToVec(Utils::standardDirectorVector));
-		s_PS.velocity.push_back(Utils::floatToVec(Utils::standardVelocity));
+
+		if (current_item == items[0] || current_item==items[1])
+		{
+			//glm::vec3 velAndDir(Utils::standardDirectorVector[0] * Utils::standardVelocity[0],
+			//	Utils::standardDirectorVector[1] * Utils::standardVelocity[1],
+			//	Utils::standardDirectorVector[2] * Utils::standardVelocity[2]);
+
+	/*		float velAndDirFloat[]{ velAndDir.x,velAndDir.y,velAndDir.z };*/
+			//s_PS.velocity.push_back(Utils::floatToVec(velAndDirFloat));
+
+			glm::vec3 randomDir(rand() % coneRadius, rand() % coneRadius, rand() % coneRadius);
+			glm::vec3 stdVel(Utils::standardVelocity[0], Utils::standardVelocity[1], Utils::standardVelocity[2]);
+			glm::vec3 finalDir(glm::normalize(randomDir) * stdVel);
+
+
+			s_PS.velocity.push_back(finalDir);
+			x = spawningPos.x;
+			y = spawningPos.y;
+			z = spawningPos.z;
+		}
+		else
+		{
+			s_PS.velocity.push_back(Utils::floatToVec(Utils::standardVelocity));
+			x = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
+			y = p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
+			z = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
+		}
 		s_PS.timeLeft.push_back(LilSpheres::lifeExpectancy);
-		float x = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-		float y = p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
-		float z = -5 + p_pars.min + (float)rand() / (RAND_MAX / (p_pars.max - p_pars.min));
 		//printf("Creating particle with position %.2f, %.2f, %.2f\n", x, y, z);
 		s_PS.position.push_back(glm::vec3(x, y, z));
 	}
@@ -412,14 +479,6 @@ void Exemple_PhysicsUpdate(float dt) {
 		//Calculate next position and next velocity
 		glm::vec3 tempPos = s_PS.position[i] + (dt * (s_PS.velocity[i]));
 		glm::vec3 tempVel = s_PS.velocity[i] + (dt * p_pars.acceleration);
-		//Check collisions with all 6 planes in the cube 
-		for (int j = 0; j < 6; j++) {
-			 if(Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
-			 {
-				 //Compute the collisions and save them in tempPos and tempVel
-				 Utils::cubePlaneCollision[j].CalculusPostPlaneCollision(tempPos,tempVel);
-			 }
-		}
 		//Collision with Sphere
 		if (renderSphere)
 		{
@@ -432,6 +491,15 @@ void Exemple_PhysicsUpdate(float dt) {
 		if (renderCapsule)
 		{
 			Utils::capsule.CapsuleCollisionCalculus(tempPos, tempVel, i, s_PS);
+		}
+
+		//Check collisions with all 6 planes in the cube 
+		for (int j = 0; j < 6; j++) {
+			if (Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
+			{
+				//Compute the collisions and save them in tempPos and tempVel
+				Utils::cubePlaneCollision[j].CalculusPostPlaneCollision(tempPos, tempVel);
+			}
 		}
 
 		//Change the position.
