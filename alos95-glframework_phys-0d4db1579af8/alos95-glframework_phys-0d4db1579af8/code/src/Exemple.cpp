@@ -14,6 +14,7 @@ extern bool renderParticles;
 extern bool renderCloth;
 extern bool renderCube;
 glm::vec3 *particlePosition;
+
 namespace {
 	static struct PhysParams {
 		glm::vec3 acceleration;
@@ -23,17 +24,28 @@ namespace {
 	} p_pars;
 
 	static struct ParticleSystem {
+		//Default spawning positions and velocity
 		glm::vec3 spawnPosDefault = glm::vec3(0, 5, 0);
 		glm::vec3 startingSpawnPoint = glm::vec3(0, 3, 0);
 		glm::vec3 spawnVelDefalut = glm::vec3(1, 2, 0);
+
+		//Displacement X for waterfall
 		float displacement = -5 + startingSpawnPoint.x;
+
+		//Min and Max spawn velocities to use random velocities when spawned
 		int spawnVelYMin = 2;
 		int spawnVelYMax = 5;
 		int spawnVelZMin = -2;
 		int spawnVelZMax = 2;
+
+		//Items for drop field to choose between these two types
 		char* items[2] = { "Fountain","Waterfall" };
 		char* current_item = items[0];
+
+		//Default emission rate
 		float emissionRate = 100;
+
+		//Particle system variables
 		std::vector<glm::vec3> position;
 		std::vector<float> timeLeft;
 		int numParticles;
@@ -56,9 +68,11 @@ namespace LilSpheres {
 namespace Sphere {
 	extern void updateSphere(glm::vec3 pos, float radius = 1.f);
 }
+
 namespace Capsule {
 	extern void updateCapsule(glm::vec3 posA, glm::vec3 posB, float radius = 1.f);
 }
+
 namespace Utils
 {
 	class Plane
@@ -67,11 +81,15 @@ namespace Utils
 		float A, B, C, D;
 		glm::vec3 normal;
 		Plane() {
+			//Create null plane at 0
 			A = B = C = D = 0;
 			normal = glm::vec3(0);
 		};
 		Plane(glm::vec3 point1, glm::vec3 point2, glm::vec3 point3)
 		{
+			//Create a plane with 3 points.
+
+			//We use 1 point and 2 vectors, and then find the normal to find the 3rd vector
 			glm::vec3 PQ = glm::vec3(point2 - point1);
 			glm::vec3 PR = glm::vec3(point3 - point1);
 			normal = glm::normalize(glm::cross(PR, PQ));
@@ -88,12 +106,10 @@ namespace Utils
 			C = normal.z;
 			D = (-A * point1.x - B * point1.y - C * point1.z);
 		};
-		void constructPlanefromTwoPositions(glm::vec3 prevPos, glm::vec3 tempPos)
-		{
-
-		}
 		bool hasCollisioned(glm::vec3 position, glm::vec3 tempPos)
 		{
+			//Check if a particle has collisioned with the plane.
+			//We get the particle previous position and the tempPos (the one that might have gone through the plane)
 			return (((glm::dot((normal), position) + D) * (glm::dot((normal), tempPos) + D)) <= 0);
 		};
 
@@ -117,21 +133,30 @@ namespace Utils
 		}
 		Sphere(glm::vec3 pos, float rad)
 		{
+			//Define a sphere by its center and the radius
 			center = pos;
 			radius = rad;
 		}
 
 		bool hasCollisioned(glm::vec3 tempPos)
 		{
+			//Check if the distance between the position of the particle 
+			//and the center of the sphere is smaller than the radius
+			//to see if the particle is inside.
 			return glm::distance(tempPos, center) < radius;
 		}
 
 
 		void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, int index, ParticleSystem particle)
 		{
+			//Check collision of the particle with the sphere
+
 			glm::vec3 normal;
 			float D;
+
+			//Get the distance between the particle position and the center
 			float d = glm::distance(tempPos, center);
+
 			//landa squared
 			float landaSquared = (glm::pow(particle.velocity[index].x, 2)) + (glm::pow(particle.velocity[index].y, 2)) + (glm::pow(particle.velocity[index].z, 2));
 			//landa
@@ -147,6 +172,7 @@ namespace Utils
 			//2nd grade equations solved
 			float solutionLandaPlus = (-landa + glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
 			float solutionLandaMinus = (-landa - glm::sqrt(glm::pow(landa, 2) + (-4 * (landaSquared)* number))) / (2 * landaSquared);
+
 			//Calculate the 2 point to see which one is the closest one
 			glm::vec3 recPointPlus = particle.position[index] + (solutionLandaPlus * particle.velocity[index]);
 			glm::vec3 recPointMinus = particle.position[index] + (solutionLandaMinus * particle.velocity[index]);
@@ -162,6 +188,8 @@ namespace Utils
 				normal = glm::normalize(normal);
 				D = -((normal.x * recPointPlus.x) + (normal.y * recPointPlus.y) + (normal.z * recPointPlus.z));
 			}
+
+			//Update the position to bounce from the surface
 			tempPos -= 2 * (glm::dot(normal, tempPos) + D) * (normal);
 			tempVel -= 2 * (glm::dot(normal, tempVel)) * (normal);
 		}
@@ -169,8 +197,11 @@ namespace Utils
 
 	class Capsule
 	{
+		//Define the parts of the capsule
 		enum capsuleCollisions { TOPSPHERE, BOTTOMSPHERE, CYLLINDER, NONE };
+
 	public:
+		//Define the 2 spheres (top and bottom) of the capsule
 		Sphere topSemiSphere;
 		Sphere bottomSemiSphere;
 
@@ -182,6 +213,7 @@ namespace Utils
 
 		Capsule(Sphere top, Sphere bottom)
 		{
+			//Create a capsule with two spheres
 			topSemiSphere = top;
 			bottomSemiSphere = bottom;
 		}
@@ -193,31 +225,33 @@ namespace Utils
 			bool collisionTop = false;
 			bool collisionBottom = false;
 			bool collisionCyllinder = false;
+
+
 			//OPTION A
-			////Calculate the distances to see if we colldie
+			//Calculate the distances to see if we collide
 			glm::vec3 AB = topSemiSphere.center - bottomSemiSphere.center;
 			glm::vec3 cross = glm::cross((tempPos - bottomSemiSphere.center), AB);
 			float ABmodule = (glm::sqrt(glm::pow(AB.x, 2) + glm::pow(AB.y, 2) + glm::pow(AB.z, 2)));
 			float crossModule = glm::sqrt(glm::pow(cross.x, 2) + glm::pow(cross.y, 2) + glm::pow(cross.z, 2));
 			float distToRect = crossModule / ABmodule;
 
-			/*//OPTION B
-			glm::vec3 closestPoint = getClosestPoint(topSemiSphere.center, bottomSemiSphere.center, tempPos);
-			float distToRect = glm::distance(closestPoint,tempPos);*/
-			if (topSemiSphere.hasCollisioned(tempPos))
+			//OPTION B
+			if (topSemiSphere.hasCollisioned(tempPos))			//Check collision with top sphere
 			{
 				collisionTop = true;
 				distToTopSphere = glm::distance(tempPos, topSemiSphere.center);
 			}
-			if (bottomSemiSphere.hasCollisioned(tempPos))
+			if (bottomSemiSphere.hasCollisioned(tempPos))		//Check collision with bottom sphere
 			{
 				collisionBottom = true;
 				distToBottomSphere = glm::distance(tempPos, bottomSemiSphere.center);
 			}
+			//If any distance is smaller than the radius, it's in collision
 			if (distToRect < topSemiSphere.radius || distToRect < bottomSemiSphere.radius)
 			{
 				collisionCyllinder = true;
 			}
+
 			//Calculate which distance is the lowest
 			if (collisionTop && collisionCyllinder)
 			{
@@ -307,6 +341,7 @@ namespace Utils
 		}
 	};
 
+	//Define the cube with 6 planes
 	Plane cubePlaneCollision[6];
 	float standardDirectorVector[3] = { 0, 0, 0 };
 	float standardVelocity[3] = { 0, -5, 0 };
@@ -327,11 +362,11 @@ namespace Utils
 		 5.f, 10.f,  5.f,
 		-5.f, 10.f,  5.f,
 	};
-	//Capsula
+	//Capsule
 	Capsule capsule = Utils::Capsule(Utils::Sphere(glm::vec3(-3.f, 2.f, 0.f), 1.f), Utils::Sphere(glm::vec3(3.f, 2.f, 0.f), 1.f));
-	//Esfera
+	//Sphere
 	Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f), 1.f);
-	//Cub
+	//Cube
 	glm::vec3 pointsPlane1[3] = { glm::vec3(-5,0,-5), glm::vec3(5,0,-5),glm::vec3(5,0,5) };  // down
 	glm::vec3 pointsPlane2[3] = { glm::vec3(-5,0,5),  glm::vec3(-5,10,5), glm::vec3(-5,0,-5) };  // front
 	glm::vec3 pointsPlane3[3] = { glm::vec3(-5,0,-5), glm::vec3(-5,10,-5),glm::vec3(5,0,-5) }; //right
@@ -341,13 +376,20 @@ namespace Utils
 
 }
 
+namespace ClothMesh {
+	extern const int numCols;
+	extern const int numRows;
+	extern void updateClothMesh(float* array_data);
+	glm::vec3 *clothPositions;
 
+}
 
 
 void Exemple_GUI()
 {
 	if (ImGui::CollapsingHeader("PARTICLE VARIABLES"))
 	{
+		ImGui::Checkbox("Render Particles", &renderParticles);
 		ImGui::SliderFloat("Emission Rate (particles / second)", &s_PS.emissionRate, 100.f, 400.f);
 		ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
 		ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
@@ -412,6 +454,11 @@ void Exemple_GUI()
 		}
 
 	}
+	if (ImGui::CollapsingHeader("CLOTH VARIABLES"))
+	{
+		if (ImGui::Checkbox("Render Cloth", &renderCloth))
+			ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0].x));
+	}
 }
 
 void Exemple_PhysicsInit()
@@ -430,6 +477,26 @@ void Exemple_PhysicsInit()
 	Utils::cubePlaneCollision[3] = Utils::Plane(Utils::pointsPlane4[0], Utils::pointsPlane4[1], Utils::pointsPlane4[2]);
 	Utils::cubePlaneCollision[4] = Utils::Plane(Utils::pointsPlane5[0], Utils::pointsPlane5[1], Utils::pointsPlane5[2]);
 	Utils::cubePlaneCollision[5] = Utils::Plane(Utils::pointsPlane6[0], Utils::pointsPlane6[1], Utils::pointsPlane6[2]);
+	ClothMesh::clothPositions = new glm::vec3[ClothMesh::numRows * ClothMesh::numCols];
+	int currentPosInArray = 0;
+	float incrementRows = 9.8f / ClothMesh::numRows;
+	printf("Increment: %f ,", incrementRows);
+	float incrementCols = 9.8f / ClothMesh::numCols;
+	printf("%f \n", incrementCols);
+	float currentRowPos = -4.9f;
+	float currentColPos = -4.9f;
+	for (int i = 0; i < ClothMesh::numRows; i++)
+	{
+		for (int j = 0; j < ClothMesh::numCols; j++)
+		{
+			printf("%f ,9.8 , %f \n", currentRowPos, currentColPos);
+			ClothMesh::clothPositions[currentPosInArray] = glm::vec3(currentRowPos, 9.8, currentColPos);
+			currentPosInArray++;
+			currentColPos += incrementCols;
+		}
+		currentRowPos += incrementRows;
+		currentColPos = -4.9f;
+	}
 }
 
 void Exemple_PhysicsUpdate(float dt) {
@@ -442,18 +509,37 @@ void Exemple_PhysicsUpdate(float dt) {
 		float z;
 		s_PS.numParticles++;
 		s_PS.timeLeft.push_back(LilSpheres::lifeExpectancy);
+
+		//If it's the fountain
 		if (s_PS.current_item == s_PS.items[0])
 		{
-			glm::vec3 randVelocity = glm::vec3((rand()) % (s_PS.spawnVelZMax - s_PS.spawnVelZMin + 1) + s_PS.spawnVelZMin, (rand()) % (s_PS.spawnVelYMax - s_PS.spawnVelYMin + 1) + s_PS.spawnVelYMin, 5);
+			//Set a random number between -5 and 5
+			float randNum = (s_PS.spawnVelYMin) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (s_PS.spawnVelYMax + s_PS.spawnVelYMax)));
+			float firstNum = std::fmod(randNum, (s_PS.spawnVelZMax - s_PS.spawnVelZMin + 1)) + s_PS.spawnVelZMin;
+			float secondNum = std::fmod(randNum, (s_PS.spawnVelYMax - s_PS.spawnVelYMin + 1)) + s_PS.spawnVelYMin;
+
+			//Assign a random velocity in between these numbers
+			glm::vec3 randVelocity = glm::vec3(firstNum, secondNum, 5);
 			s_PS.velocity.push_back((randVelocity));
+
+			//Assign the position that the user can change via UI
 			x = s_PS.spawnPosDefault.x;
 			y = s_PS.spawnPosDefault.y;
 			z = s_PS.spawnPosDefault.z;
 		}
+
+		//If it's the waterfall
 		else if ((s_PS.current_item == s_PS.items[1]))
 		{
-			glm::vec3 randPos = glm::vec3((rand()) % (int)((s_PS.startingSpawnPoint.x + s_PS.displacement) - s_PS.startingSpawnPoint.x + 1) + (s_PS.startingSpawnPoint.x), s_PS.startingSpawnPoint.y, s_PS.startingSpawnPoint.z);
+			//Set a random number between -5 and 5 for the X displacement
+			float randNum = (-5) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (5 + 5)));
+			float firstNum = std::fmod(randNum, ((s_PS.startingSpawnPoint.x + s_PS.displacement) - s_PS.startingSpawnPoint.x + 1)) + s_PS.startingSpawnPoint.x;
+
+			//Assign the random position and a default velocity
+			glm::vec3 randPos = glm::vec3(firstNum, s_PS.startingSpawnPoint.y, s_PS.startingSpawnPoint.z);
 			s_PS.velocity.push_back((s_PS.spawnVelDefalut));
+
+			//Assign the position that the user can change via UI
 			x = randPos.x;
 			y = randPos.y;
 			z = randPos.z;
@@ -465,14 +551,6 @@ void Exemple_PhysicsUpdate(float dt) {
 		//Calculate next position and next velocity
 		glm::vec3 tempPos = s_PS.position[i] + (dt * (s_PS.velocity[i]));
 		glm::vec3 tempVel = s_PS.velocity[i] + (dt * p_pars.acceleration);
-		//Check collisions with all 6 planes in the cube 
-		for (int j = 0; j < 6; j++) {
-			if (Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
-			{
-				//Compute the collisions and save them in tempPos and tempVel
-				Utils::cubePlaneCollision[j].CalculusPostPlaneCollision(tempPos, tempVel);
-			}
-		}
 		//Collision with Sphere
 		if (renderSphere)
 		{
@@ -485,6 +563,15 @@ void Exemple_PhysicsUpdate(float dt) {
 		if (renderCapsule)
 		{
 			Utils::capsule.CapsuleCollisionCalculus(tempPos, tempVel, i, s_PS);
+		}
+
+		//Check collisions with all 6 planes in the cube 
+		for (int j = 0; j < 6; j++) {
+			if (Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
+			{
+				//Compute the collisions and save them in tempPos and tempVel
+				Utils::cubePlaneCollision[j].CalculusPostPlaneCollision(tempPos, tempVel);
+			}
 		}
 
 		//Change the position.

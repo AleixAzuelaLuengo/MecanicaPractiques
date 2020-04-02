@@ -59,6 +59,7 @@ void cleanupPrims() {
 }
 
 void renderPrims() {
+	
 	if (renderSphere)
 		Sphere::drawSphere();
 	if (renderCapsule)
