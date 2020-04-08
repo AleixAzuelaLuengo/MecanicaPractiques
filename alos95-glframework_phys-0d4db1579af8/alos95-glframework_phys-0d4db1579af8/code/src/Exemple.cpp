@@ -47,6 +47,7 @@ namespace {
 
 		//Particle system variables
 		std::vector<glm::vec3> position;
+		std::vector<glm::vec3> prevPosition;
 		std::vector<float> timeLeft;
 		int numParticles;
 		int particlesPerFrame;
@@ -341,6 +342,7 @@ namespace Utils
 		}
 	};
 
+	#pragma region DEFINITION OF GEOMETRICAL FIGURES
 	//Define the cube with 6 planes
 	Plane cubePlaneCollision[6];
 	float standardDirectorVector[3] = { 0, 0, 0 };
@@ -373,15 +375,26 @@ namespace Utils
 	glm::vec3 pointsPlane4[3] = { glm::vec3(-5,0,5), glm::vec3(5,0,5),glm::vec3(5.f, 10.f,5.f) };//left
 	glm::vec3 pointsPlane5[3] = { glm::vec3(5.f, 10.f,  5.f), glm::vec3(5,0,-5),glm::vec3(5,0,5) }; //back
 	glm::vec3 pointsPlane6[3] = { glm::vec3(-5.f, 10.f, -5.f),glm::vec3(5.f, 10.f, -5.f),glm::vec3(5.f, 10.f,  5.f) };//up
+#pragma endregion
 
+	float moduleOfAVector(glm::vec3 vec)
+	{
+		return glm::sqrt(glm::pow(vec.x, 2) + glm::pow(vec.y, 2) + glm::pow(vec.z, 2));
+	}
 }
 
 namespace ClothMesh {
 	extern const int numCols;
 	extern const int numRows;
 	extern void updateClothMesh(float* array_data);
-	glm::vec3 *clothPositions;
-
+	glm::vec3 clothPositions[18][14];
+	glm::vec3 **prevPositions;
+	glm::vec3 **velocity;
+	float mass = 1;
+	float originalSpringRowsLenght;
+	float originalSpringColsLenght;
+	const float kElasticity = 100.f;
+	const float kDamping = 1.f;
 }
 
 
@@ -457,7 +470,7 @@ void Exemple_GUI()
 	if (ImGui::CollapsingHeader("CLOTH VARIABLES"))
 	{
 		if (ImGui::Checkbox("Render Cloth", &renderCloth))
-			ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0].x));
+			ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0][0].x));
 	}
 }
 
@@ -466,40 +479,89 @@ void Exemple_PhysicsInit()
 	std::mt19937 rng(0.154687f);
 	Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
 	p_pars.acceleration = glm::vec3(0, -9.81, 0);
-	s_PS.particlesPerFrame = glm::round(s_PS.emissionRate / 1000 * 33.3f);
-	s_PS.numParticles = 0;
-	renderParticles = true;
-	LilSpheres::firstParticleIdx = 0;
-	LilSpheres::lifeExpectancy = 1.f;
 	Utils::cubePlaneCollision[0] = Utils::Plane(Utils::pointsPlane1[0], Utils::pointsPlane1[1], Utils::pointsPlane1[2]);
 	Utils::cubePlaneCollision[1] = Utils::Plane(Utils::pointsPlane2[0], Utils::pointsPlane2[1], Utils::pointsPlane2[2]);
 	Utils::cubePlaneCollision[2] = Utils::Plane(Utils::pointsPlane3[0], Utils::pointsPlane3[1], Utils::pointsPlane3[2]);
 	Utils::cubePlaneCollision[3] = Utils::Plane(Utils::pointsPlane4[0], Utils::pointsPlane4[1], Utils::pointsPlane4[2]);
 	Utils::cubePlaneCollision[4] = Utils::Plane(Utils::pointsPlane5[0], Utils::pointsPlane5[1], Utils::pointsPlane5[2]);
 	Utils::cubePlaneCollision[5] = Utils::Plane(Utils::pointsPlane6[0], Utils::pointsPlane6[1], Utils::pointsPlane6[2]);
-	ClothMesh::clothPositions = new glm::vec3[ClothMesh::numRows * ClothMesh::numCols];
-	int currentPosInArray = 0;
-	float incrementRows = 9.8f / ClothMesh::numRows;
-	printf("Increment: %f ,", incrementRows);
-	float incrementCols = 9.8f / ClothMesh::numCols;
-	printf("%f \n", incrementCols);
-	float currentRowPos = -4.9f;
-	float currentColPos = -4.9f;
+
+	ClothMesh::prevPositions = new glm::vec3*[ClothMesh::numRows];
+	ClothMesh::velocity = new glm::vec3*[ClothMesh::numRows];
+	for (int i = 0; i < ClothMesh::numRows; i++)
+	{
+		ClothMesh::prevPositions[i] = new glm::vec3[ClothMesh::numCols];
+		ClothMesh::velocity[i] = new glm::vec3[ClothMesh::numCols];
+	}
+	float incrementRows = 8.f / ClothMesh::numRows;
+	float incrementCols = 8.f / ClothMesh::numCols;
+	ClothMesh::originalSpringColsLenght = incrementCols;
+	ClothMesh::originalSpringRowsLenght = incrementRows;
+	float currentRowPos = -4.f;
+	float currentColPos = -4.f;
 	for (int i = 0; i < ClothMesh::numRows; i++)
 	{
 		for (int j = 0; j < ClothMesh::numCols; j++)
 		{
-			printf("%f ,9.8 , %f \n", currentRowPos, currentColPos);
-			ClothMesh::clothPositions[currentPosInArray] = glm::vec3(currentRowPos, 9.8, currentColPos);
-			currentPosInArray++;
+			ClothMesh::clothPositions[i][j] = glm::vec3(currentRowPos, 9.8, currentColPos);
+			ClothMesh::prevPositions[i][j] = glm::vec3(currentRowPos, 9.8, currentColPos);
+			ClothMesh::velocity[i][j] = glm::vec3(0,0,0);
 			currentColPos += incrementCols;
 		}
 		currentRowPos += incrementRows;
-		currentColPos = -4.9f;
+		currentColPos = -4.f;
 	}
 }
 
-void Exemple_PhysicsUpdate(float dt) {
+void Exemple_PhysicsUpdate(float dt) 
+{
+
+	//Verlet
+	glm::vec3 tempPos;
+	glm::vec3 tempVel;
+	glm::vec3 F;
+	if (renderCloth)
+	{
+		for (int i = 1; i < ClothMesh::numRows; i++)
+		{
+			for (int j = 0; j < ClothMesh::numCols; j++)
+			{
+				if (j != ClothMesh::numCols - 1)
+				{
+					F -= (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1]) * ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j + 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])/ (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])));
+				}
+				if (j != 0)
+				{
+					F -= (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) * ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j - 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1])));
+				}
+				if (i != 0)
+				{
+					F -= (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) * ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 1][j]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j])));
+				}
+				if (i != ClothMesh::numRows - 1)
+				{
+					F -= (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) * ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 1][j]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j])));
+				}
+
+				F += p_pars.acceleration;
+				tempPos = ClothMesh::clothPositions[i][j] + (ClothMesh::clothPositions[i][j] - ClothMesh::prevPositions[i][j]) + F/ ClothMesh::mass * glm::pow(dt, 2);
+				printf("Position particle %i,%i is %f,%f,%f \n", i, j, tempPos.x, tempPos.y, tempPos.z);
+				tempVel = (tempPos - ClothMesh::clothPositions[i][j]) / dt;
+				ClothMesh::prevPositions[i][j] = ClothMesh::clothPositions[i][j];
+				ClothMesh::clothPositions[i][j] = tempPos;
+				ClothMesh::velocity[i][j] = tempVel;
+				F = glm::vec3(0, 0, 0);
+			}
+		}
+		ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0][0].x));
+
+	}
+}
+
+void Exemple_PhysicsCleanup() {
+}
+
+/*
 	s_PS.particlesPerFrame = glm::round(s_PS.emissionRate / 1000 * 33.3f);
 	int temp = s_PS.numParticles;
 	for (int i = s_PS.numParticles; i < s_PS.particlesPerFrame + temp; i++)
@@ -547,11 +609,15 @@ void Exemple_PhysicsUpdate(float dt) {
 		s_PS.position.push_back(glm::vec3(x, y, z));
 	}
 	for (int i = 0; i < s_PS.numParticles; i++) {
-		s_PS.timeLeft[i] -= dt;
-		//Calculate next position and next velocity
+		glm::vec3 tempPos;
+		glm::vec3 tempVel;
+		/*Calculate next position and next velocity Euler
 		glm::vec3 tempPos = s_PS.position[i] + (dt * (s_PS.velocity[i]));
 		glm::vec3 tempVel = s_PS.velocity[i] + (dt * p_pars.acceleration);
-		//Collision with Sphere
+
+		tempPos = s_PS.position[i] + (s_PS.position[i])
+
+		/*Collision with Sphere
 		if (renderSphere)
 		{
 			if (Utils::sphere.hasCollisioned(tempPos))
@@ -565,7 +631,7 @@ void Exemple_PhysicsUpdate(float dt) {
 			Utils::capsule.CapsuleCollisionCalculus(tempPos, tempVel, i, s_PS);
 		}
 
-		//Check collisions with all 6 planes in the cube 
+		//Check collisions with all 6 planes in the cube
 		for (int j = 0; j < 6; j++) {
 			if (Utils::cubePlaneCollision[j].hasCollisioned(s_PS.position[i], tempPos))
 			{
@@ -579,17 +645,6 @@ void Exemple_PhysicsUpdate(float dt) {
 		//so these are the final positions after all collisions are computed.
 		s_PS.position[i] = tempPos;
 		s_PS.velocity[i] = tempVel;
-
-
-		//Check life of the particle
-		if (s_PS.timeLeft[i] < 0)
-		{
-			s_PS.numParticles--;
-			s_PS.position.erase(s_PS.position.begin() + i);
-			s_PS.velocity.erase(s_PS.velocity.begin() + i);
-			s_PS.timeLeft.erase(s_PS.timeLeft.begin() + i);
-			i--;
-		}
 	}
 	particlePosition = new glm::vec3[s_PS.numParticles];
 	for (int i = 0; i < s_PS.numParticles; i++)
@@ -598,9 +653,4 @@ void Exemple_PhysicsUpdate(float dt) {
 	}
 	LilSpheres::particleCount = s_PS.numParticles;
 	LilSpheres::updateParticles(0, s_PS.numParticles, &(particlePosition[0].x));
-	delete[] particlePosition;
-}
-
-void Exemple_PhysicsCleanup() {
-}
-
+	delete[] particlePosition;*/
