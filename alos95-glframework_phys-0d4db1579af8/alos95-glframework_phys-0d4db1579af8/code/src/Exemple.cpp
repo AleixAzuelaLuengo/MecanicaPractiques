@@ -9,6 +9,7 @@
 
 /////////Forward declarations
 extern bool renderSphere;
+long nanCrashes = 0;
 extern bool renderCapsule;
 extern bool renderParticles;
 extern bool renderCloth;
@@ -148,7 +149,7 @@ namespace Utils
 		}
 
 
-		void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, glm::vec3 &velocity, glm::vec3 &position)
+		void SphereCollisionCalculus(glm::vec3 &tempPos, glm::vec3 &tempVel, glm::vec3 &velocity, glm::vec3 &position, glm::vec3 &prevPosition)
 		{
 			//Check collision of the particle with the sphere
 
@@ -191,6 +192,7 @@ namespace Utils
 			}
 
 			//Update the position to bounce from the surface
+			prevPosition = tempPos;
 			tempPos -= 2 * (glm::dot(normal, tempPos) + D) * (normal);
 			tempVel -= 2 * (glm::dot(normal, tempVel)) * (normal);
 		}
@@ -384,6 +386,7 @@ namespace Utils
 }
 
 namespace ClothMesh {
+	float timeSimulation = 0;
 	extern const int numCols;
 	extern const int numRows;
 	extern void updateClothMesh(float* array_data);
@@ -393,11 +396,47 @@ namespace ClothMesh {
 	float mass = 1;
 	float originalSpringRowsLenght;
 	float diagonalOriginalLenght;
-	float originalSpringColsLenght;
-	const float kElasticity = 15.;
-	const float kDamping = 0.5f;
+	float originalSpringColsLenght; 
+	float kElasticity = 150.;
+	float kDamping = 75.f;
+	void resetMesh()
+	{
+		float incrementRows = 8.f / ClothMesh::numRows;
+		float incrementCols = 8.f / ClothMesh::numCols;
+		float currentRowPos = -4.f;
+		float currentColPos = -4.f;
+		for (int i = 0; i < ClothMesh::numRows; i++)
+		{
+			for (int j = 0; j < ClothMesh::numCols; j++)
+			{
+				clothPositions[i][j] = glm::vec3(currentRowPos, 9.8, currentColPos);
+				prevPositions[i][j] = glm::vec3(currentRowPos, 9.8, currentColPos);
+				velocity[i][j] = glm::vec3(0, 0, 0);
+				currentColPos += incrementCols;
+			}
+			currentRowPos += incrementRows;
+			currentColPos = -4.f;
+		}
+	}
+	glm::vec3 calculusF(glm::vec3 clothPos, glm::vec3 nextPos, glm::vec3 velocity, glm::vec3 nextVelocity, float originalSpringLenght)
+	{
+		glm::vec3 retorno;
+		glm::vec3 normal = ((clothPos - nextPos) / (Utils::moduleOfAVector(clothPos - nextPos)));
+		float Elasticity = (ClothMesh::kElasticity * (Utils::moduleOfAVector(clothPos - nextPos) - originalSpringLenght));
+		float Damping = ClothMesh::kDamping * glm::dot<float>((velocity - nextVelocity), normal);
+		if (!std::isnan(Damping) || !std::isnan(Elasticity))
+		{
+			retorno = glm::vec3(-1.f, -1.f, -1.f) * ((Elasticity + Damping) * normal);
+		}
+		else
+		{
+			nanCrashes++;
+			printf("is NaN %i \n", nanCrashes);
+			retorno = glm::vec3(0.f, 0.f, 0.f);
+		}
+		return retorno;
+	}
 }
-
 
 void Exemple_GUI()
 {
@@ -442,7 +481,7 @@ void Exemple_GUI()
 	if (ImGui::CollapsingHeader("SPHERE VARIABLES"))
 	{
 		ImGui::Checkbox("Render Sphere", &renderSphere);
-		if (ImGui::SliderFloat3("Sphere center", &Utils::sphere.center.x, -5.f, 5.f))
+		if (ImGui::SliderFloat3("Sphere center", &Utils::sphere.center.x, -5.f, 10.f))
 		{
 			Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
 		}
@@ -472,21 +511,32 @@ void Exemple_GUI()
 	{
 		if (ImGui::Checkbox("Render Cloth", &renderCloth))
 			ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0][0].x));
+		(ImGui::SliderFloat("Elasticity Constant", &ClothMesh::kElasticity, 0.0f, 1000.f));
+		(ImGui::SliderFloat("Damping Constant", &ClothMesh::kDamping, 0.0f, 1000.f));
+		(ImGui::SliderFloat("Row Initial Rest ", &ClothMesh::originalSpringRowsLenght, 0.0f, 10.f));
+		(ImGui::SliderFloat("Column Initial Rest ", &ClothMesh::originalSpringColsLenght, 0.0f, 10.f));
+		(ImGui::SliderFloat("Diagonal Initial Rest ", &ClothMesh::diagonalOriginalLenght, 0.0f, 10.f));
+
+		if (ImGui::Button("Reset Mesh"))
+		{
+			ClothMesh::resetMesh();
+		}
 	}
 }
 
 void Exemple_PhysicsInit()
 {
-	std::mt19937 rng(0.154687f);
-	Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
-	p_pars.acceleration = glm::vec3(0, -9.81, 0);
+	renderSphere = true;
+	renderCloth = true;
 	Utils::cubePlaneCollision[0] = Utils::Plane(Utils::pointsPlane1[0], Utils::pointsPlane1[1], Utils::pointsPlane1[2]);
 	Utils::cubePlaneCollision[1] = Utils::Plane(Utils::pointsPlane2[0], Utils::pointsPlane2[1], Utils::pointsPlane2[2]);
 	Utils::cubePlaneCollision[2] = Utils::Plane(Utils::pointsPlane3[0], Utils::pointsPlane3[1], Utils::pointsPlane3[2]);
 	Utils::cubePlaneCollision[3] = Utils::Plane(Utils::pointsPlane4[0], Utils::pointsPlane4[1], Utils::pointsPlane4[2]);
 	Utils::cubePlaneCollision[4] = Utils::Plane(Utils::pointsPlane5[0], Utils::pointsPlane5[1], Utils::pointsPlane5[2]);
 	Utils::cubePlaneCollision[5] = Utils::Plane(Utils::pointsPlane6[0], Utils::pointsPlane6[1], Utils::pointsPlane6[2]);
-
+	Utils::sphere.center = glm::vec3((-4) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (-2 - (-4)))), (0) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (8 - (0)))), (-2) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (-2)))));
+	Utils::sphere.radius = (0.5f) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (0.5f))));
+	Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
 	ClothMesh::prevPositions = new glm::vec3*[ClothMesh::numRows];
 	ClothMesh::velocity = new glm::vec3*[ClothMesh::numRows];
 	for (int i = 0; i < ClothMesh::numRows; i++)
@@ -499,19 +549,19 @@ void Exemple_PhysicsInit()
 	ClothMesh::originalSpringColsLenght = incrementCols;
 	ClothMesh::originalSpringRowsLenght = incrementRows;
 	ClothMesh::diagonalOriginalLenght = glm::sqrt(glm::pow(incrementRows, 2) + glm::pow(incrementCols, 2));
-	float currentRowPos = -4.f;
-	float currentColPos = -4.f;
+	float currentRowPos = -3.5f;
+	float currentColPos = -3.5f;
 	for (int i = 0; i < ClothMesh::numRows; i++)
 	{
 		for (int j = 0; j < ClothMesh::numCols; j++)
 		{
 			ClothMesh::clothPositions[i][j] = glm::vec3(currentRowPos, 9.8, currentColPos);
 			ClothMesh::prevPositions[i][j] = glm::vec3(currentRowPos, 9.8, currentColPos);
-			ClothMesh::velocity[i][j] = glm::vec3(0,0,0);
+			ClothMesh::velocity[i][j] = glm::vec3(0.f,0.f,0.f);
 			currentColPos += incrementCols;
 		}
 		currentRowPos += incrementRows;
-		currentColPos = -4.f;
+		currentColPos = -3.f;
 	}
 }
 
@@ -521,56 +571,101 @@ void Exemple_PhysicsUpdate(float dt)
 	//Verlet
 	glm::vec3 tempPos;
 	glm::vec3 tempVel;
-	glm::vec3 FTotal = glm::vec3(0, 0, 0);
-
+	glm::vec3 FTotal = glm::vec3(0.f, 0.f, 0.f);
 	if (renderCloth)
 	{
-		for (int i = 1; i < ClothMesh::numRows; i++)
+		ClothMesh::timeSimulation += dt;
+		if (ClothMesh::timeSimulation >= 20.f)
+		{
+			ClothMesh::timeSimulation = 0.f;
+			ClothMesh::resetMesh();
+			Utils::sphere.center = glm::vec3((-4) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (-2 - (-4)))), (0) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (8 - (0)))), (-2) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (-2)))));
+			Utils::sphere.radius = (0.5f) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (0.5f))));
+			Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+		}
+		else
+		{
+			for (int i = 1; i < ClothMesh::numRows; i++)
 		{
 			for (int j = 0; j < ClothMesh::numCols; j++)
 			{
+				#pragma region F CALCULUS
+				//HORITZONTAL
 				if (j != ClothMesh::numCols - 1)
 				{
-					FTotal += glm::vec3(-1,-1,-1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1]) - ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j + 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])/ (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])));
+					//FTotal += glm::vec3(-1.f,-1.f,-1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1]) - ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j + 1]) , ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])/ (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 1])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i][j + 1], ClothMesh::velocity[i][j], ClothMesh::velocity[i][j + 1], ClothMesh::originalSpringColsLenght);
 				}
 				if (j != 0)
 				{
-					FTotal += glm::vec3(-1, -1, -1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) - ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j - 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1])));
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) - ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j - 1]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 1])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i][j - 1], ClothMesh::velocity[i][j], ClothMesh::velocity[i][j - 1], ClothMesh::originalSpringColsLenght);
 				}
+				//VERTICAL
 				if (i != 0)
 				{
-					FTotal += glm::vec3(-1, -1, -1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) - ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 1][j]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j])));
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) - ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 1][j]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i - 1][j], ClothMesh::velocity[i][j], ClothMesh::velocity[i - 1][j], ClothMesh::originalSpringColsLenght);
 				}
 				if (i != ClothMesh::numRows - 1)
 				{
-					FTotal += glm::vec3(-1, -1, -1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) - ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 1][j]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j])));
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) - ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 1][j]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i + 1][j], ClothMesh::velocity[i][j], ClothMesh::velocity[i + 1][j], ClothMesh::originalSpringColsLenght);
 				}
+				////DIAGONALS
 				if (i != 0 && j != 0)
 				{
-					FTotal += glm::vec3(-1, -1, -1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 1][j - 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1])));
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 1][j - 1]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j - 1])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i - 1][j - 1], ClothMesh::velocity[i][j], ClothMesh::velocity[i - 1][j - 1], ClothMesh::originalSpringColsLenght);
 				}
 				if (i != 0 && j != ClothMesh::numCols - 1)
 				{
-					FTotal += glm::vec3(-1, -1, -1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 1][j + 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1])));
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 1][j + 1]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 1][j + 1])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i - 1][j + 1], ClothMesh::velocity[i][j], ClothMesh::velocity[i - 1][j + 1], ClothMesh::originalSpringColsLenght);
 				}
 				if (i != ClothMesh::numRows - 1 && j != ClothMesh::numCols - 1)
 				{
-					FTotal += glm::vec3(-1, -1, -1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 1][j + 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1])));
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 1][j + 1]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j + 1])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i + 1][j + 1], ClothMesh::velocity[i][j], ClothMesh::velocity[i + 1][j + 1], ClothMesh::originalSpringColsLenght);
 				}
 				if (i != ClothMesh::numRows - 1 && j != 0)
 				{
-					FTotal += glm::vec3(-1, -1, -1) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * (ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 1][j - 1]) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1])))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1])));
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1]) - ClothMesh::diagonalOriginalLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 1][j - 1]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 1][j - 1])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i + 1][j - 1], ClothMesh::velocity[i][j], ClothMesh::velocity[i + 1][j - 1], ClothMesh::originalSpringColsLenght);
 				}
-				FTotal += glm::vec3(0,-1,0);
-				tempPos = ClothMesh::clothPositions[i][j] + (ClothMesh::clothPositions[i][j] - ClothMesh::prevPositions[i][j]) + FTotal / ClothMesh::mass * glm::pow(dt, 2);
-				tempVel = (tempPos - ClothMesh::clothPositions[i][j]) / dt;
+				//BENDING
+				if (j < ClothMesh::numCols - 2)
+				{
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 2]) - ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j + 2]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 2]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 2]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 2]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j + 2])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i][j + 2], ClothMesh::velocity[i][j], ClothMesh::velocity[i][j + 2], ClothMesh::originalSpringColsLenght * 2);
+				}
+				if (i < ClothMesh::numRows - 2)
+				{
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 2][j]) - ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i + 2][j]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 2][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 2][j]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 2][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i + 2][j])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i + 2][j], ClothMesh::velocity[i][j], ClothMesh::velocity[i + 2][j], ClothMesh::originalSpringRowsLenght * 2);
+				}
+				if (i > 1)
+				{
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 2]) - ClothMesh::originalSpringColsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i][j - 2]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 2]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 2]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 2]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i][j - 2])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i -  2][j], ClothMesh::velocity[i][j], ClothMesh::velocity[i - 2][j], ClothMesh::originalSpringRowsLenght * 2);
+				}
+				if (j > 1)
+				{
+					//FTotal += glm::vec3(-1.f, -1.f, -1.f) * (ClothMesh::kElasticity * (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 2][j]) - ClothMesh::originalSpringRowsLenght) + ClothMesh::kDamping * glm::dot((ClothMesh::velocity[i][j] - ClothMesh::velocity[i - 2][j]), ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 2][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 2][j]))))) * ((ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 2][j]) / (Utils::moduleOfAVector(ClothMesh::clothPositions[i][j] - ClothMesh::clothPositions[i - 2][j])));
+					FTotal += ClothMesh::calculusF(ClothMesh::clothPositions[i][j], ClothMesh::clothPositions[i][j - 2], ClothMesh::velocity[i][j], ClothMesh::velocity[i][j - 2], ClothMesh::originalSpringColsLenght * 2);
+				}
+				#pragma endregion
+
+				FTotal += glm::vec3(0.f,-9.f,0.f);
+				tempPos = ClothMesh::clothPositions[i][j] + (ClothMesh::clothPositions[i][j] - ClothMesh::prevPositions[i][j]) + FTotal / ClothMesh::mass * glm::pow((dt/10), 2.f);
+				tempVel = (tempPos - ClothMesh::clothPositions[i][j]) / (dt/10);
 				ClothMesh::prevPositions[i][j] = ClothMesh::clothPositions[i][j];
 
 				if (renderSphere)
 				{
 					if (Utils::sphere.hasCollisioned(tempPos))
 					{
-						Utils::sphere.SphereCollisionCalculus(tempPos, tempVel, ClothMesh::velocity[i][j], ClothMesh::clothPositions[i][j]);
+						Utils::sphere.SphereCollisionCalculus(tempPos, tempVel, ClothMesh::velocity[i][j], ClothMesh::clothPositions[i][j], ClothMesh::prevPositions[i][j]);
 					}
 				}
 
@@ -583,11 +678,11 @@ void Exemple_PhysicsUpdate(float dt)
 				}
 				ClothMesh::clothPositions[i][j] = tempPos;
 				ClothMesh::velocity[i][j] = tempVel;
-				FTotal = glm::vec3(0, 0, 0);
+				FTotal = glm::vec3(0.f, 0.f, 0.f);
 			}
 		}
+		}
 		ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0][0].x));
-
 	}
 }
 

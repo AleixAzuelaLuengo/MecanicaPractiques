@@ -25,7 +25,8 @@ void PhysicsInit() {
 }
 
 void PhysicsUpdate(float dt) {
-	Exemple_PhysicsUpdate(dt);
+	
+		Exemple_PhysicsUpdate(dt);
 }
 
 void PhysicsCleanup() {
