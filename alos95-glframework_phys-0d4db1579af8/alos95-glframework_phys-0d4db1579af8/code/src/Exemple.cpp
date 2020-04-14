@@ -579,7 +579,7 @@ void Exemple_PhysicsUpdate(float dt)
 	glm::vec3 FTotal = glm::vec3(0.f, 0.f, 0.f);
 	if (renderCloth)
 	{
-		for (int i = 0; i < 11; i++)
+		for (int i = 0; i < 6; i++)
 		{
 			ClothMesh::timeSimulation += dt;
 			if (ClothMesh::timeSimulation >= 20.f)
@@ -587,7 +587,7 @@ void Exemple_PhysicsUpdate(float dt)
 				ClothMesh::timeSimulation = 0.f;
 				ClothMesh::resetMesh();
 				Utils::sphere.center = glm::vec3((-4) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (-2 - (-4)))), (0) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (8 - (0)))), (-2) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (-2)))));
-				Utils::sphere.radius = (0.5f) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (0.5f))));
+				Utils::sphere.radius = (1.0f) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (1.0f))));
 				Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
 			}
 			else
