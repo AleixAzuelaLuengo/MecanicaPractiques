@@ -175,7 +175,7 @@ namespace Utils
 			if (det < 0)
 			{
 				printf("Arrel Negativa \n");
-				system("pause");
+				return;
 			}
 			float solutionLandaPlus = (-landa + glm::sqrt((det)))/ (2 * landaSquared);
 			float solutionLandaMinus = (-landa - glm::sqrt((det))) / (2 * landaSquared);
@@ -446,6 +446,19 @@ namespace ClothMesh {
 	}
 }
 
+namespace Cube
+{
+	glm::mat4 identity { 1 };
+	glm::mat4 inertiaBody;
+	glm::mat4 inertia;
+	glm::vec3 torque;
+	glm::vec3 position( -0 , 9 , 0 );
+	glm::vec3 rotation( -0 , 45 , 0 );
+	glm::vec3 point = glm::vec3{ 0.5 , 0.5 , 0.5 } + position;
+	glm::vec3 velocity( 0 , 0 , 0 );
+	extern void updateCube(const glm::mat4& transform);
+}
+
 void Exemple_GUI()
 {
 	if (ImGui::CollapsingHeader("PARTICLE VARIABLES"))
@@ -529,12 +542,22 @@ void Exemple_GUI()
 			ClothMesh::resetMesh();
 		}
 	}
+	if (ImGui::CollapsingHeader("CUBE VARIABLES"))
+	{
+
+	}
 }
 
 void Exemple_PhysicsInit()
 {
-	renderSphere = true;
-	renderCloth = true;
+	glm::mat4 rotation = glm::rotate(Cube::identity, glm::radians(45.f) , glm::vec3(0.f, 45.f, 0.f));
+	Cube::inertiaBody = ((glm::transpose(rotation) *  rotation) - rotation * glm::transpose(rotation));
+	Cube::inertia = rotation * Cube::inertiaBody * glm::transpose(rotation);
+	Cube::torque = glm::cross((Cube::rotation - Cube::point), Cube::velocity);
+	glm::mat4 transform = glm::translate(rotation, Cube::position);
+	Cube::updateCube(transform);
+	
+	renderCube = true;
 	Utils::cubePlaneCollision[0] = Utils::Plane(Utils::pointsPlane1[0], Utils::pointsPlane1[1], Utils::pointsPlane1[2]);
 	Utils::cubePlaneCollision[1] = Utils::Plane(Utils::pointsPlane2[0], Utils::pointsPlane2[1], Utils::pointsPlane2[2]);
 	Utils::cubePlaneCollision[2] = Utils::Plane(Utils::pointsPlane3[0], Utils::pointsPlane3[1], Utils::pointsPlane3[2]);
@@ -560,6 +583,7 @@ void Exemple_PhysicsInit()
 
 void Exemple_PhysicsUpdate(float dt) 
 {
+
 	//Verlet
 	glm::vec3 tempPos;
 	glm::vec3 tempVel;
@@ -676,6 +700,18 @@ void Exemple_PhysicsUpdate(float dt)
 		}
 		ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0][0].x));
 	}
+	if (renderCube)
+	{
+		glm::vec3 newVelocity = Cube::velocity + glm::vec3(0, -0, 0) * dt;
+		glm::vec3 newPosition = Cube::velocity * dt + Cube::position;
+		glm::mat4 newRotation = glm::rotate(Cube::identity, glm::radians(45.f), glm::vec3(0.f, 45.f, 0.f));
+		Cube::inertia = newRotation * Cube::inertiaBody * glm::transpose(newRotation);
+		glm::mat4 newTransform = glm::translate(newRotation, Cube::position);
+		Cube::updateCube(newTransform);
+		Cube::position = newPosition;
+		Cube::velocity = newVelocity;
+	}
+	
 }
 
 void Exemple_PhysicsCleanup() {
