@@ -448,14 +448,25 @@ namespace ClothMesh {
 
 namespace Cube
 {
+	float mass = 1.f;
+	float radiantRotation = 0;
 	glm::mat4 identity { 1 };
-	glm::mat4 inertiaBody;
 	glm::mat4 inertia;
+	glm::vec3 angularVelocity;
+	glm::vec3 linearMomentum;
 	glm::vec3 torque;
 	glm::vec3 position( -0 , 9 , 0 );
 	glm::vec3 rotation( -0 , 45 , 0 );
-	glm::vec3 point = glm::vec3{ 0.5 , 0.5 , 0.5 } + position;
+	glm::vec3 scale(0.5f, 0.5f, 0.5f);
+	glm::vec3 point = glm::vec3{ 0.5f , 0.5f , 0.5f } + position;
 	glm::vec3 velocity( 0 , 0 , 0 );
+	glm::mat4 mat4_inertiaBody{ 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f, 0.f,
+							0.f , 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f,
+							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.z,2)), 0.f,
+							0.f, 0.f, 0.f, 1.f	};
+	glm::mat3 mat3_inertiaBody{ 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f, 
+							0.f , 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.x,2)), 0.f, 
+							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.z,2))};
 	extern void updateCube(const glm::mat4& transform);
 }
 
@@ -550,9 +561,9 @@ void Exemple_GUI()
 
 void Exemple_PhysicsInit()
 {
+	
 	glm::mat4 rotation = glm::rotate(Cube::identity, glm::radians(45.f) , glm::vec3(0.f, 45.f, 0.f));
-	Cube::inertiaBody = ((glm::transpose(rotation) *  rotation) - rotation * glm::transpose(rotation));
-	Cube::inertia = rotation * Cube::inertiaBody * glm::transpose(rotation);
+	Cube::inertia = rotation * (glm::inverse(Cube::mat4_inertiaBody)) * glm::transpose(rotation);
 	Cube::torque = glm::cross((Cube::rotation - Cube::point), Cube::velocity);
 	glm::mat4 transform = glm::translate(rotation, Cube::position);
 	Cube::updateCube(transform);
@@ -702,10 +713,13 @@ void Exemple_PhysicsUpdate(float dt)
 	}
 	if (renderCube)
 	{
-		glm::vec3 newVelocity = Cube::velocity + glm::vec3(0, -0, 0) * dt;
 		glm::vec3 newPosition = Cube::velocity * dt + Cube::position;
-		glm::mat4 newRotation = glm::rotate(Cube::identity, glm::radians(45.f), glm::vec3(0.f, 45.f, 0.f));
-		Cube::inertia = newRotation * Cube::inertiaBody * glm::transpose(newRotation);
+		glm::vec3 newLinearMomentum = Cube::linearMomentum + Cube::torque * dt;
+		glm::vec3 newVelocity = Cube::velocity + glm::vec3(0, -0, 0) * dt;
+		glm::vec3 newPoint = Cube::point + newVelocity * dt;
+		Cube::inertia = glm::rotate(Cube::identity, glm::radians(Cube::radiantRotation), Cube::rotation) * glm::inverse(Cube::mat4_inertiaBody) * glm::transpose(glm::rotate(Cube::identity, glm::radians(Cube::radiantRotation), Cube::rotation));
+		Cube::angularVelocity = glm::mat3(Cube::inertia) * newLinearMomentum;
+		glm::mat4 newRotation = glm::rotate(Cube::identity, glm::radians(Cube::radiantRotation), Cube::rotation) + dt * (Cube::angularVelocity * glm::mat3(glm::rotate(Cube::identity, glm::radians(Cube::radiantRotation), Cube::rotation)));
 		glm::mat4 newTransform = glm::translate(newRotation, Cube::position);
 		Cube::updateCube(newTransform);
 		Cube::position = newPosition;
