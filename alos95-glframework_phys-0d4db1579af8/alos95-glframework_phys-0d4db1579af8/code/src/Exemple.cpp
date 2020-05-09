@@ -474,25 +474,22 @@ namespace {
 namespace Cube
 {
 
-	float mass = 10.f;
+	float mass = 5.f;
 	glm::mat4 newTransform;
 	glm::mat4 identity { 1 };
-	glm::vec3 linearMomentum{ 0,0,0 };
+	glm::vec3 linearMomentum;
 	glm::vec3 angularMomentum{ 0,0,0 };
 	glm::vec3 torque{ 0.0f,0.0f,0.0f };
 	glm::vec3 position( 0 , 10 , 0 );	//center of mass
 	glm::mat3 rotation;	//orientation
 	glm::vec3 scale(0.5f, 0.5f, 0.5f);
 	glm::vec3 point = glm::vec3{ 0.5f , 0.5f , 0.5f } + position;	//random cube position
-	glm::vec3 gravity(0, -5, 0);
+	glm::vec3 gravity(0, -9.81f, 0);
 	glm::vec3 velocity(0, 0, 0);
 
 	glm::mat3 mat3_inertiaBody{ 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f, 
 							0.f , 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.x,2)), 0.f, 
 							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.z,2))};
-
-
-	glm::vec3 ascendingForce(10, 20, 0);
 
 
 	extern void updateCube(const glm::mat4& transform);
@@ -503,7 +500,7 @@ namespace Cube
 	{
 		position = { std::rand() % 9 - 4,std::rand() % 5 + 5,std::rand() % 9 - 4 };
 		rotation = glm::rotate(Cube::identity, glm::radians(float(std::rand() % 360)), glm::vec3(std::rand()%2, std::rand() % 2, std::rand() % 2));
-
+		linearMomentum = { std::rand() % 10 - 5,std::rand() % 10 + 5,std::rand() % 10 - 5 };
 		startTime = std::clock();
 		duration = 0;
 	}
@@ -768,7 +765,7 @@ void Exemple_PhysicsUpdate(float dt)
 	{
 		//Calculate new position
 		//P(t+dt) = P(t) + dt * F(t)
-		 Cube::position = Cube::position + dt * Cube::gravity;
+		 Cube::position = Cube::position + dt * Cube::velocity;
 
 		//Calculate new linear momentum
 		Cube::linearMomentum = Cube::linearMomentum + dt * Cube::gravity;
@@ -802,8 +799,7 @@ void Exemple_PhysicsUpdate(float dt)
 
 
 		//Update the cube variables
-		Cube::newTransform = glm::translate(Cube::identity, Cube::position)*(glm::mat4(Cube::rotation));
-		
+		Cube::newTransform = glm::translate(Cube::identity, Cube::position)*glm::rotate(Cube::identity,glm::radians(45.0f),glm::vec3(1,1,1));
 
 		Cube::updateCube(Cube::newTransform);
 
