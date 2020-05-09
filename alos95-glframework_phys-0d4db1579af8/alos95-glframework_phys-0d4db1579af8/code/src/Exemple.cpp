@@ -499,7 +499,7 @@ namespace Cube
 	void reset_simulation()
 	{
 		position = { std::rand() % 9 - 4,std::rand() % 5 + 5,std::rand() % 9 - 4 };
-		linearMomentum = { std::rand() % 2 - 2,std::rand() % 3 + 3,std::rand() % 2 - 2 };
+		linearMomentum = { std::rand() % 3 - 3,std::rand() % 4 + 4,std::rand() % 3 - 3 };
 		angularMomentum = { 0,0,0 };
 		torque = { 0,0,0 };
 		velocity = { 0,0,0 };
