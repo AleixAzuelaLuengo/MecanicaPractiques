@@ -7,6 +7,9 @@
 #include <random>
 #include <vector>
 #include <iostream>
+#include<time.h> 
+#include <ctime>
+#include <glm/gtx/string_cast.hpp>
 
 #pragma region Other assignments
 
@@ -23,7 +26,11 @@
 
 #pragma endregion
 
+#define SIMULATION_TIME 15
+
 extern bool renderCube;
+double startTime;
+float duration;
 
 namespace {
 	static struct PhysParams {
@@ -33,37 +40,42 @@ namespace {
 		float max = 10.f;
 	} p_pars;
 
-	static struct ParticleSystem {
-		//Default spawning positions and velocity
-		glm::vec3 spawnPosDefault = glm::vec3(0, 5, 0);
-		glm::vec3 startingSpawnPoint = glm::vec3(0, 3, 0);
-		glm::vec3 spawnVelDefalut = glm::vec3(1, 2, 0);
+#pragma region Other assignments
 
-		//Displacement X for waterfall
-		float displacement = -5 + startingSpawnPoint.x;
 
-		//Min and Max spawn velocities to use random velocities when spawned
-		int spawnVelYMin = 2;
-		int spawnVelYMax = 5;
-		int spawnVelZMin = -2;
-		int spawnVelZMax = 2;
+	//static struct ParticleSystem {
+	//	//Default spawning positions and velocity
+	//	glm::vec3 spawnPosDefault = glm::vec3(0, 5, 0);
+	//	glm::vec3 startingSpawnPoint = glm::vec3(0, 3, 0);
+	//	glm::vec3 spawnVelDefalut = glm::vec3(1, 2, 0);
 
-		//Items for drop field to choose between these two types
-		char* items[2] = { "Fountain","Waterfall" };
-		char* current_item = items[0];
+	//	//Displacement X for waterfall
+	//	float displacement = -5 + startingSpawnPoint.x;
 
-		//Default emission rate
-		float emissionRate = 100;
+	//	//Min and Max spawn velocities to use random velocities when spawned
+	//	int spawnVelYMin = 2;
+	//	int spawnVelYMax = 5;
+	//	int spawnVelZMin = -2;
+	//	int spawnVelZMax = 2;
 
-		//Particle system variables
-		std::vector<glm::vec3> position;
-		std::vector<glm::vec3> prevPosition;
-		std::vector<float> timeLeft;
-		int numParticles;
-		int particlesPerFrame;
-		std::vector<glm::vec3> velocity;
-		void updateParticlesPerFrame(int newN) { particlesPerFrame = newN; };
-	} s_PS;
+	//	//Items for drop field to choose between these two types
+	//	char* items[2] = { "Fountain","Waterfall" };
+	//	char* current_item = items[0];
+
+	//	//Default emission rate
+	//	float emissionRate = 100;
+
+	//	//Particle system variables
+	//	std::vector<glm::vec3> position;
+	//	std::vector<glm::vec3> prevPosition;
+	//	std::vector<float> timeLeft;
+	//	int numParticles;
+	//	int particlesPerFrame;
+	//	std::vector<glm::vec3> velocity;
+	//	void updateParticlesPerFrame(int newN) { particlesPerFrame = newN; };
+	//} s_PS;
+#pragma endregion
+
 }
 
 #pragma region Other assignments
@@ -461,36 +473,39 @@ namespace {
 
 namespace Cube
 {
+
 	float mass = 10.f;
 	glm::mat4 newTransform;
 	glm::mat4 identity { 1 };
-	glm::vec3 linearMomentum;
+	glm::vec3 linearMomentum{ 0,0,0 };
+	glm::vec3 angularMomentum{ 0,0,0 };
 	glm::vec3 torque{ 0.0f,0.0f,0.0f };
-	glm::vec3 position( 0 , 10 , 0 );
-	glm::mat3 rotation;
+	glm::vec3 position( 0 , 10 , 0 );	//center of mass
+	glm::mat3 rotation;	//orientation
 	glm::vec3 scale(0.5f, 0.5f, 0.5f);
-	glm::vec3 point = glm::vec3{ 0.5f , 0.5f , 0.5f } + position;
-	glm::vec3 gravity(0, -9.81, 0);
+	glm::vec3 point = glm::vec3{ 0.5f , 0.5f , 0.5f } + position;	//random cube position
+	glm::vec3 gravity(0, -5, 0);
 	glm::vec3 velocity(0, 0, 0);
 
 	glm::mat3 mat3_inertiaBody{ 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f, 
 							0.f , 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.x,2)), 0.f, 
 							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.z,2))};
-	
-	
+
+
+	glm::vec3 ascendingForce(10, 20, 0);
+
+
 	extern void updateCube(const glm::mat4& transform);
 	extern void cleanupCube();
+
+
 	void reset_simulation()
 	{
-		position = { 0,10,0 };
-		//velocity = { 0,0,0 };
-		//torque = { 0,0,0 };
-		//linearMomentum = { 0,0,0 };
-		//scale = { 0.5f,0.5f, 0.5f };
-		//rotation = glm::mat3(1.0f);
+		position = { std::rand() % 9 - 4,std::rand() % 5 + 5,std::rand() % 9 - 4 };
+		rotation = glm::rotate(Cube::identity, glm::radians(float(std::rand() % 360)), glm::vec3(std::rand()%2, std::rand() % 2, std::rand() % 2));
 
-		//newTransform = glm::mat4(1.0f);
-		//updateCube(newTransform);
+		startTime = std::clock();
+		duration = 0;
 	}
 }
 
@@ -583,9 +598,6 @@ void Exemple_GUI()
 #pragma endregion
 
 
-	ImGui::SliderFloat3("Velocity", &Cube::velocity.x, -10.0f, 10.0f);
-	ImGui::SliderFloat3("Torque", &Cube::torque.x, -10.0f, 10.0f);
-
 	if (ImGui::Button("Reset simulation"))
 	{
 		Cube::reset_simulation();
@@ -622,7 +634,9 @@ void Exemple_PhysicsInit()
 
 #pragma endregion
 
+	std::srand(time(NULL));
 	renderCube = true;
+	Cube::reset_simulation();
 }
 
 glm::mat3 TranformToMatrix(glm::vec3 vector) {
@@ -750,25 +764,30 @@ void Exemple_PhysicsUpdate(float dt)
 //}
 #pragma endregion
 
-
 	if (renderCube)
 	{
 		//Calculate new position
 		//P(t+dt) = P(t) + dt * F(t)
-		glm::vec3 newPosition = Cube::position + dt * Cube::gravity;
+		 Cube::position = Cube::position + dt * Cube::gravity;
 
 		//Calculate new linear momentum
-		//L(t+dt) = L(t) + dt * Torque(t)
-		glm::vec3 newLinearMomentum = Cube::linearMomentum + dt * Cube::torque;
+		Cube::linearMomentum = Cube::linearMomentum + dt * Cube::gravity;
 
+		//Calculate torque
+		//Torque(t) = Sum of (ri(t)-x(t))*Fi(t)
+		Cube::torque = glm::cross((Cube::point - Cube::position),Cube::gravity);
+
+		//Calculate new angular momentum
+		//L(t+dt) = L(t) + dt * Torque(t)
+		Cube::angularMomentum = Cube::angularMomentum + dt * Cube::torque;
 
 		//Calculate new velocity
 		//V(t+dt) = P(t+dt)/M
-		glm::vec3 newVelocity = newPosition / Cube::mass;
+		Cube::velocity = Cube::linearMomentum / Cube::mass;
 
 		//Center of mass
 		//X(t+dt) = x(t) + dt * v(t+dt)
-		glm::vec3 newPoint = Cube::point + dt * newVelocity;
+		glm::vec3 newPoint = Cube::point + dt * Cube::velocity;
 
 		//Calculate Inertia
 		//I(t)Inverse = R(t) * IbodyInversed * R(t)Transposed
@@ -776,25 +795,26 @@ void Exemple_PhysicsUpdate(float dt)
 
 		//Calculate angular velocity
 		//w(t) = I(t)Inverse * L(t+dt)
-		glm::vec3 W = Iinversed * newLinearMomentum;
+		glm::vec3 W = Iinversed * Cube::angularMomentum;
 
 		//Calculate new rotation
-		glm::mat3 newRotation = Cube::rotation + dt * ((TranformToMatrix(W) * Cube::rotation));
+		Cube::rotation = Cube::rotation + dt * ((TranformToMatrix(W) * Cube::rotation));
 
 
 		//Update the cube variables
-		glm::mat4 aux = glm::translate(Cube::identity, newPosition)*(glm::mat4(newRotation)*Cube::identity);
+		Cube::newTransform = glm::translate(Cube::identity, Cube::position)*(glm::mat4(Cube::rotation));
+		
 
-		Cube::velocity = newVelocity;
-		Cube::position = newPosition;
-		Cube::rotation = newRotation;
-
-		Cube::updateCube(aux);
+		Cube::updateCube(Cube::newTransform);
 
 	}
 
 	
-
+	duration = (std::clock() - startTime) / (double)CLOCKS_PER_SEC;
+	if (duration >= SIMULATION_TIME)
+	{
+		Cube::reset_simulation();
+	}
 	
 }
 
