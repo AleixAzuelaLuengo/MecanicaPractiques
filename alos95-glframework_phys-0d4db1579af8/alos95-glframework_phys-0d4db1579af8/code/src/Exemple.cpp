@@ -474,14 +474,14 @@ namespace {
 namespace Cube
 {
 
-	float mass = 5.f;
+	float mass = 1.f;
 	glm::mat4 newTransform;
 	glm::mat4 identity { 1 };
 	glm::vec3 linearMomentum;
 	glm::vec3 angularMomentum{ 0,0,0 };
 	glm::vec3 torque{ 0.0f,0.0f,0.0f };
 	glm::vec3 position( 0 , 10 , 0 );	//center of mass
-	glm::mat3 rotation;	//orientation
+	glm::vec3 rotation;	//orientation
 	glm::vec3 scale(0.5f, 0.5f, 0.5f);
 	glm::vec3 point = glm::vec3{ 0.5f , 0.5f , 0.5f } + position;	//random cube position
 	glm::vec3 gravity(0, -9.81f, 0);
@@ -489,7 +489,7 @@ namespace Cube
 
 	glm::mat3 mat3_inertiaBody{ 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f, 
 							0.f , 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.x,2)), 0.f, 
-							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.z,2))};
+							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.y,2))};
 
 
 	extern void updateCube(const glm::mat4& transform);
@@ -499,11 +499,42 @@ namespace Cube
 	void reset_simulation()
 	{
 		position = { std::rand() % 9 - 4,std::rand() % 5 + 5,std::rand() % 9 - 4 };
-		rotation = glm::rotate(Cube::identity, glm::radians(float(std::rand() % 360)), glm::vec3(std::rand()%2, std::rand() % 2, std::rand() % 2));
-		linearMomentum = { std::rand() % 10 - 5,std::rand() % 10 + 5,std::rand() % 10 - 5 };
+		linearMomentum = { std::rand() % 2 - 2,std::rand() % 3 + 3,std::rand() % 2 - 2 };
+		angularMomentum = { 0,0,0 };
+		torque = { 0,0,0 };
+		velocity = { 0,0,0 };
+
+		rotation = glm::vec3(std::rand() % 2, std::rand() % 2, std::rand() % 2);
+		rotation *= glm::vec3(std::rand()%45+1, std::rand() % 45 + 1, std::rand() % 45 + 1);
+		rotation = glm::vec3(glm::radians(rotation.x), glm::radians(rotation.y), glm::radians(rotation.z));
+
+
 		startTime = std::clock();
 		duration = 0;
 	}
+}
+
+glm::mat3 eulerToMatrix(glm::vec3 &rotVec)
+{
+	glm::mat3 rotationYaw{
+		1,		0,						0,
+		0,		glm::cos(rotVec.x),		-glm::sin(rotVec.x),
+		0,		glm::sin(rotVec.x),		glm::cos(rotVec.x)
+	};
+
+	glm::mat3 rotationPitch{
+		glm::cos(rotVec.y),		0,		glm::sin(rotVec.y),
+		0,				1,		0,
+		-glm::sin(rotVec.y),	0,		glm::cos(rotVec.y)
+	};
+
+	glm::mat3 rotationRoll{
+		glm::cos(rotVec.z),		-glm::sin(rotVec.z),	0,
+		glm::sin(rotVec.z),		glm::cos(rotVec.z),		0,
+		0,						0,						1
+	};
+
+	return rotationYaw * rotationPitch * rotationRoll;
 }
 
 void Exemple_GUI()
@@ -640,6 +671,45 @@ glm::mat3 TranformToMatrix(glm::vec3 vector) {
 	return glm::mat3(0, -vector.z, vector.y, vector.z, 0, -vector.x, -vector.y, vector.x, 0);
 };
 
+void Euler(float dt)
+{
+	//Calculate new linear momentum
+	Cube::linearMomentum = Cube::linearMomentum + dt * Cube::gravity;
+
+	//Calculate torque
+	//Torque(t) = Sum of (ri(t)-x(t))*Fi(t)
+	Cube::torque = glm::cross((Cube::point - Cube::position), Cube::gravity);
+
+	//Calculate new angular momentum
+	//L(t+dt) = L(t) + dt * Torque(t)
+	Cube::angularMomentum = Cube::angularMomentum + dt * Cube::torque;
+
+
+	//Calculate new velocity
+	//V(t+dt) = P(t+dt)/M
+	Cube::velocity = Cube::linearMomentum / Cube::mass;
+
+	//Calculate new position
+	//P(t+dt) = P(t) + dt * F(t)
+	Cube::position = Cube::position + dt * Cube::velocity;
+
+	//Calculate Inertia
+	//I(t)Inverse = R(t) * IbodyInversed * R(t)Transposed
+	glm::mat3 Iinversed = eulerToMatrix(Cube::rotation) * Cube::mat3_inertiaBody * glm::transpose(eulerToMatrix(Cube::rotation));
+
+	//Calculate angular velocity
+	//w(t) = I(t)Inverse * L(t+dt)
+	glm::vec3 W = Iinversed * Cube::angularMomentum;
+
+	//Calculate new rotation
+	//R(t+dt)=R(t)+dt*(w(t)*R(t))
+	Cube::rotation = Cube::rotation + dt * W * glm::transpose(eulerToMatrix(Cube::rotation));
+
+	//Update the cube variables
+	Cube::newTransform = glm::translate(Cube::identity, Cube::position) * glm::mat4(eulerToMatrix(Cube::rotation));
+
+}
+
 void Exemple_PhysicsUpdate(float dt) 
 {
 #pragma region Other assignments
@@ -763,44 +833,7 @@ void Exemple_PhysicsUpdate(float dt)
 
 	if (renderCube)
 	{
-		//Calculate new position
-		//P(t+dt) = P(t) + dt * F(t)
-		 Cube::position = Cube::position + dt * Cube::velocity;
-
-		//Calculate new linear momentum
-		Cube::linearMomentum = Cube::linearMomentum + dt * Cube::gravity;
-
-		//Calculate torque
-		//Torque(t) = Sum of (ri(t)-x(t))*Fi(t)
-		Cube::torque = glm::cross((Cube::point - Cube::position),Cube::gravity);
-
-		//Calculate new angular momentum
-		//L(t+dt) = L(t) + dt * Torque(t)
-		Cube::angularMomentum = Cube::angularMomentum + dt * Cube::torque;
-
-		//Calculate new velocity
-		//V(t+dt) = P(t+dt)/M
-		Cube::velocity = Cube::linearMomentum / Cube::mass;
-
-		//Center of mass
-		//X(t+dt) = x(t) + dt * v(t+dt)
-		glm::vec3 newPoint = Cube::point + dt * Cube::velocity;
-
-		//Calculate Inertia
-		//I(t)Inverse = R(t) * IbodyInversed * R(t)Transposed
-		glm::mat3 Iinversed = Cube::rotation * glm::inverse(Cube::mat3_inertiaBody) * glm::transpose(Cube::rotation);
-
-		//Calculate angular velocity
-		//w(t) = I(t)Inverse * L(t+dt)
-		glm::vec3 W = Iinversed * Cube::angularMomentum;
-
-		//Calculate new rotation
-		Cube::rotation = Cube::rotation + dt * ((TranformToMatrix(W) * Cube::rotation));
-
-
-		//Update the cube variables
-		Cube::newTransform = glm::translate(Cube::identity, Cube::position)*glm::rotate(Cube::identity,glm::radians(45.0f),glm::vec3(1,1,1));
-
+		Euler(dt);
 		Cube::updateCube(Cube::newTransform);
 
 	}
