@@ -185,8 +185,8 @@ namespace Cube
 		float valueJ = computeImpulseCorrection(Cube::mass, ra, Cube::mat3_inertiaBody, vrel, Cube::e, normal);
 		glm::mat3 Iinversed;
 		glm::vec3 Wt0;
-		//change linear momentum to normal for bouncing, NEEDS FRICTION
-		Cube::linearMomentum = normal;
+		//sum normal to linear momentum so it slides, NEEDS FRICTION
+		Cube::linearMomentum += normal;
 		Cube::torque = glm::cross((Cube::point - Cube::position), (valueJ * normal));
 		Cube::angularMomentum = Cube::torque;
 		Cube::velocity = (valueJ * normal) / Cube::mass;
