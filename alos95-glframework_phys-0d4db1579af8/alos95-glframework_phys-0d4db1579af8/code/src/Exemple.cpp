@@ -173,7 +173,7 @@ namespace Cube
 	glm::mat3 mat3_inertiaBody{ 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f, 
 							0.f , 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.x,2)), 0.f, 
 							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.y,2))};
-	float k_Friction = 0.0f;
+	float k_Friction = 0.3f;
 
 
 	extern void updateCube(const glm::mat4& transform);
@@ -182,15 +182,27 @@ namespace Cube
 	void CollisionDetected(glm::vec3 normal, float dt)
 	{
 
+		glm::vec3 Friction = (-Cube::k_Friction)*(normal.x*normal.x + normal.y*normal.y + normal.z*normal.z)*(Cube::linearMomentum/(Cube::linearMomentum.x*Cube::linearMomentum.x + Cube::linearMomentum.y*Cube::linearMomentum.y+ Cube::linearMomentum.z*Cube::linearMomentum.z));
 
 		glm::vec3 ra = .5f * -normal;
 		float vrel = glm::dot(normal, Cube::velocity + glm::cross(Cube::W, ra));
 		float valueJ = computeImpulseCorrection(Cube::mass, ra, Cube::mat3_inertiaBody, vrel, Cube::e, normal);
 		glm::mat3 Iinversed;
 		glm::vec3 Wt0;
-		//sum normal to linear momentum so it slides, NEEDS FRICTION
-		Cube::linearMomentum += normal;
-		//std::cout << glm::to_string(normal) << std::endl;
+
+		if (Cube::linearMomentum.x<0.5 && Cube::linearMomentum.x>-0.5 && Cube::linearMomentum.z<0.5 && Cube::linearMomentum.z>-0.5)
+		{
+			Cube::linearMomentum = glm::vec3(0, 0, 0);
+		}
+		else
+		{
+			Cube::linearMomentum += normal;
+
+			if (Cube::linearMomentum.x > 0 || Cube::linearMomentum.z > 0)
+				Cube::linearMomentum += Friction;
+
+		}
+
 		Cube::torque = glm::cross((Cube::point - Cube::position), (valueJ * normal));
 		Cube::angularMomentum = Cube::torque;
 		Cube::velocity = (valueJ * normal) / Cube::mass;
@@ -240,7 +252,7 @@ namespace Cube
 	void reset_simulation()
 	{
 		position = { std::rand() % 7 - 4,std::rand() % 3 + 5,std::rand() % 7 - 4 };
-		linearMomentum = { std::rand() % 6 - 3,std::rand() % 4 + 4,std::rand() % 6 - 3 };
+		linearMomentum = { std::rand() % 10 - 5,std::rand() % 4 + 4,std::rand() % 10 - 5 };
 		angularMomentum = { 0,0,0 };
 		torque = { 0,0,0 };
 		velocity = { 0,0,0 };
@@ -261,7 +273,7 @@ void Exemple_GUI()
 		Cube::reset_simulation();
 	}
 	ImGui::InputFloat("Impluse", &Cube::e);
-	ImGui::DragFloat("Friction", &Cube::k_Friction);
+	ImGui::DragFloat("Friction", &Cube::k_Friction,0.1,0,1);
 	ImGui::DragInt("Simulation time", &SIMULATION_TIME,1,1,25);
 
 }
