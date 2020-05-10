@@ -26,11 +26,12 @@
 
 #pragma endregion
 
-#define SIMULATION_TIME 15
+//#define SIMULATION_TIME 15
+int SIMULATION_TIME = 15;
 
 extern bool renderCube;
 double startTime;
-float duration;
+float duration = SIMULATION_TIME;
 
 namespace {
 	static struct PhysParams {
@@ -177,15 +178,57 @@ namespace Cube
 	extern void updateCube(const glm::mat4& transform);
 	extern void cleanupCube();
 
-	int CheckCollision()
+	void CollisionDetected(glm::vec3 normal, float dt)
 	{
-		if (position.y + 0.5f >= 10) return 1;
-		else if (position.y - 0.5f <= 0) return -1;
-		else if (position.z - 0.5f <= -5) return -2;
-		else if (position.z + 0.5f >= 5) return 2;
-		else if (position.x + 0.5f >= 5) return 3;
-		else if (position.x - 0.5f <= -5) return -3;
-		else return false;
+		glm::vec3 ra = .5f * -normal;
+		float vrel = glm::dot(normal, Cube::velocity + glm::cross(Cube::W, ra));
+		float valueJ = computeImpulseCorrection(Cube::mass, ra, Cube::mat3_inertiaBody, vrel, Cube::e, normal);
+		glm::mat3 Iinversed;
+		glm::vec3 Wt0;
+		//change linear momentum to normal for bouncing, NEEDS FRICTION
+		Cube::linearMomentum = normal;
+		Cube::torque = glm::cross((Cube::point - Cube::position), (valueJ * normal));
+		Cube::angularMomentum = Cube::torque;
+		Cube::velocity = (valueJ * normal) / Cube::mass;
+		Cube::position = Cube::position + dt * Cube::velocity;
+		Iinversed = eulerToMatrix(Cube::rotation) * Cube::mat3_inertiaBody * glm::transpose(eulerToMatrix(Cube::rotation));
+		W = Iinversed * Cube::torque;
+		Cube::rotation = Cube::rotation + dt * W * glm::transpose(eulerToMatrix(Cube::rotation));
+		Cube::newTransform = glm::translate(Cube::identity, Cube::position) * glm::mat4(eulerToMatrix(Cube::rotation));
+	}
+
+	void CheckCollision(float dt)
+	{
+		if (position.y + 0.5f >= 10)	//1
+		{
+			Cube::CollisionDetected(cubePlaneCollision[5].normal, dt);
+
+		}
+		if (position.y - 0.5f <= 0) //-1
+		{
+			Cube::CollisionDetected(cubePlaneCollision[0].normal, dt);
+
+		}
+		if (position.z + 0.5f >= 5) //2
+		{
+			Cube::CollisionDetected(cubePlaneCollision[3].normal, dt);
+
+		}
+		if (position.z - 0.5f <= -5) //-2
+		{
+			Cube::CollisionDetected(cubePlaneCollision[2].normal, dt);
+
+		}
+		if (position.x + 0.5f >= 5) //3
+		{
+			Cube::CollisionDetected(cubePlaneCollision[4].normal, dt);
+
+		}
+		if (position.x - 0.5f <= -5) //-3
+		{
+			Cube::CollisionDetected(cubePlaneCollision[1].normal, dt);
+
+		}
 	}
 	void reset_simulation()
 	{
@@ -200,34 +243,19 @@ namespace Cube
 		startTime = std::clock();
 		duration = 0;
 	}
-	void CollisionDetected(glm::vec3 normal, float dt)
-	{
-		glm::vec3 ra = .5f * -normal; 
-		float vrel = glm::dot(normal, Cube::velocity + glm::cross(Cube::W, ra));
-		float valueJ = computeImpulseCorrection(Cube::mass, ra, Cube::mat3_inertiaBody, vrel, Cube::e, normal);
-		glm::mat3 Iinversed;
-		glm::vec3 Wt0;
-		Cube::torque = glm::cross((Cube::point - Cube::position), (valueJ * normal));
-		Cube::angularMomentum = Cube::torque;
-		Cube::velocity = (valueJ * normal) / Cube::mass;
-		Cube::position = Cube::position + dt * Cube::velocity;
-		Iinversed = eulerToMatrix(Cube::rotation) * Cube::mat3_inertiaBody * glm::transpose(eulerToMatrix(Cube::rotation));
-		W = Iinversed * Cube::torque;
-		Cube::rotation = Cube::rotation + dt * W * glm::transpose(eulerToMatrix(Cube::rotation));
-		Cube::newTransform = glm::translate(Cube::identity, Cube::position) * glm::mat4(eulerToMatrix(Cube::rotation));
-	}
+
 }
 
 
 void Exemple_GUI()
 {
-
-
 	if (ImGui::Button("Reset simulation"))
 	{
 		Cube::reset_simulation();
 	}
 	ImGui::InputFloat("Implus", &Cube::e);
+	ImGui::DragInt("Simulation time", &SIMULATION_TIME,1,1,25);
+
 }
 
 void Exemple_PhysicsInit()
@@ -293,28 +321,9 @@ void Exemple_PhysicsUpdate(float dt)
 	if (renderCube)
 	{
 		Euler(dt);
-		
-		switch(Cube::CheckCollision())
-		{
-		case 1: // y = 10
-			Cube::CollisionDetected(cubePlaneCollision[5].normal, dt);
-			break;
-		case -1:// y = 0
-			Cube::CollisionDetected(cubePlaneCollision[0].normal, dt);
-			break;
-		case 2:// z = 5
-			Cube::CollisionDetected(cubePlaneCollision[3].normal, dt);
-			break;
-		case -2:// z = -5
-			Cube::CollisionDetected(cubePlaneCollision[2].normal, dt);
-			break;
-		case 3:// x = 5
-			Cube::CollisionDetected(cubePlaneCollision[4].normal, dt);
-			break;
-		case -3: //x - -5
-			Cube::CollisionDetected(cubePlaneCollision[1].normal, dt);
-			break;
-		}
+
+		Cube::CheckCollision(dt);
+
 		Cube::updateCube(Cube::newTransform);
 
 	}
