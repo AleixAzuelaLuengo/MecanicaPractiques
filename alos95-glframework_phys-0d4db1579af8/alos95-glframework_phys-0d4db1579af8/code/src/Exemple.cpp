@@ -147,6 +147,11 @@ glm::mat3 eulerToMatrix(glm::vec3 &rotVec)
 	return rotationYaw * rotationPitch * rotationRoll;
 }
 
+float computeImpulseCorrection(float massCube, glm::vec3 rCube, glm::mat3 iCube, float vrela, float e, glm::vec3 normal) 
+{
+	return (-(1 + e)* vrela) / (1 / massCube + glm::dot(normal, glm::cross(iCube * glm::cross(rCube, normal), rCube)));
+}
+
 namespace Cube
 {
 	
@@ -159,10 +164,11 @@ namespace Cube
 	glm::vec3 position( 0 , 10 , 0 );	//center of mass
 	glm::vec3 rotation;	//orientation
 	glm::vec3 scale(0.5f, 0.5f, 0.5f);
+	glm::vec3 W;
 	glm::vec3 point = glm::vec3{ 0.5f , 0.5f , 0.5f } + position;	//random cube position
 	glm::vec3 gravity(0, -9.81f, 0);
 	glm::vec3 velocity(0, 0, 0);
-	float implus = 10;
+	float e = 0;
 	glm::mat3 mat3_inertiaBody{ 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.y,2) + glm::pow(Cube::scale.x,2)), 0.f, 0.f, 
 							0.f , 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.x,2)), 0.f, 
 							0.f, 0.f, 1.f / 12.f * Cube::mass * (glm::pow(Cube::scale.z,2) + glm::pow(Cube::scale.y,2))};
@@ -188,22 +194,22 @@ namespace Cube
 		angularMomentum = { 0,0,0 };
 		torque = { 0,0,0 };
 		velocity = { 0,0,0 };
-
 		rotation = glm::vec3(std::rand() % 2, std::rand() % 2, std::rand() % 2);
 		rotation *= glm::vec3(std::rand()%45+1, std::rand() % 45 + 1, std::rand() % 45 + 1);
 		rotation = glm::vec3(glm::radians(rotation.x), glm::radians(rotation.y), glm::radians(rotation.z));
-
-
 		startTime = std::clock();
 		duration = 0;
 	}
 	void CollisionDetected(glm::vec3 normal, float dt)
 	{
+		glm::vec3 ra = .5f * -normal; 
+		float vrel = glm::dot(normal, Cube::velocity + glm::cross(Cube::W, ra));
+		float valueJ = computeImpulseCorrection(Cube::mass, ra, Cube::mat3_inertiaBody, vrel, Cube::e, normal);
 		glm::mat3 Iinversed;
-		glm::vec3 W;
-		Cube::torque = glm::cross((Cube::point - Cube::position), glm::vec3(Cube::implus));
+		glm::vec3 Wt0;
+		Cube::torque = glm::cross((Cube::point - Cube::position), (valueJ * normal));
 		Cube::angularMomentum = Cube::torque;
-		Cube::velocity = glm::vec3(Cube::implus) * normal / Cube::mass;
+		Cube::velocity = (valueJ * normal) / Cube::mass;
 		Cube::position = Cube::position + dt * Cube::velocity;
 		Iinversed = eulerToMatrix(Cube::rotation) * Cube::mat3_inertiaBody * glm::transpose(eulerToMatrix(Cube::rotation));
 		W = Iinversed * Cube::torque;
@@ -215,129 +221,18 @@ namespace Cube
 
 void Exemple_GUI()
 {
-#pragma region Other assignments
-
-	//if (ImGui::CollapsingHeader("PARTICLE VARIABLES"))
-	//{
-	//	ImGui::Checkbox("Render Particles", &renderParticles);
-	//	ImGui::SliderFloat("Emission Rate (particles / second)", &s_PS.emissionRate, 100.f, 400.f);
-	//	ImGui::SliderFloat("Min Position Range", &p_pars.min, 0.f, 4.f);
-	//	ImGui::SliderFloat("Max Position Range", &p_pars.max, 6.f, 10.f);
-	//	ImGui::SliderFloat("Life Expectancy in seconds", &LilSpheres::lifeExpectancy, 1.f, 10.f);
-	//}
-	//if (ImGui::CollapsingHeader("EMISSION TYPE VARIABLES"))
-	//{
-	//	if (ImGui::BeginCombo("Spawning Type", s_PS.current_item))
-	//	{
-	//		for (int n = 0; n < IM_ARRAYSIZE(s_PS.items); n++)
-	//		{
-	//			bool is_selected = (s_PS.current_item == s_PS.items[n]);
-	//			if (ImGui::Selectable(s_PS.items[n], is_selected))
-	//				s_PS.current_item = s_PS.items[n];
-	//			if (is_selected)
-	//				ImGui::SetItemDefaultFocus();
-	//		}
-
-	//		ImGui::EndCombo();
-	//	}
-	//	if (s_PS.current_item == s_PS.items[0]) // fountain
-	//	{
-	//		ImGui::Text("FOUNTAIN VARIABLES");
-	//		ImGui::SliderFloat3("Starting position", &s_PS.spawnPosDefault.x, -5.f, 5.f);
-	//		ImGui::SliderInt("Min Direction", &s_PS.spawnVelYMin, -5.f, 5.f);
-	//		ImGui::SliderInt("Max Direction", &s_PS.spawnVelYMax, 1, 5.f);
-	//	}
-	//	else if (s_PS.current_item == s_PS.items[1]) //waterfall
-	//	{
-	//		ImGui::Text("WATERFALL VARIABLES");
-	//		ImGui::SliderFloat3("Starting direction", &s_PS.spawnVelDefalut.x, -5.f, 5.f);
-	//		ImGui::SliderFloat3("Starting Point", &s_PS.startingSpawnPoint.x, -5.f, 5.f);
-	//		ImGui::SliderFloat("Max Displament on X axis", &s_PS.displacement, -0, 5 - s_PS.startingSpawnPoint.x);
-	//	}
-	//}
-	//if (ImGui::CollapsingHeader("SPHERE VARIABLES"))
-	//{
-	//	ImGui::Checkbox("Render Sphere", &renderSphere);
-	//	if (ImGui::SliderFloat3("Sphere center", &Utils::sphere.center.x, -5.f, 10.f))
-	//	{
-	//		Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
-	//	}
-	//	if (ImGui::SliderFloat("Sphere radius", &Utils::sphere.radius, 1.f, 3.f))
-	//	{
-	//		Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
-	//	}
-	//}
-	//if (ImGui::CollapsingHeader("CAPSULE VARIABLES"))
-	//{
-	//	ImGui::Checkbox("Render Capsule", &renderCapsule);
-	//	if (ImGui::SliderFloat3("Capsule Top Sphere center", &Utils::capsule.topSemiSphere.center.x, -5.f, 5.f))
-	//	{
-	//		Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
-	//	}
-	//	if (ImGui::SliderFloat3("Capsule Bottom Sphere center", &Utils::capsule.bottomSemiSphere.center.x, -5.f, 5.f))
-	//	{
-	//		Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
-	//	}
-	//	if (ImGui::SliderFloat("Capsule Radius", &Utils::capsule.topSemiSphere.radius, 1.f, 5.f))
-	//	{
-	//		Capsule::updateCapsule(Utils::capsule.topSemiSphere.center, Utils::capsule.bottomSemiSphere.center, Utils::capsule.topSemiSphere.radius);
-	//	}
-
-	//}
-	//if (ImGui::CollapsingHeader("CLOTH VARIABLES"))
-	//{
-	//	if (ImGui::Checkbox("Render Cloth", &renderCloth))
-	//		ClothMesh::updateClothMesh(&(ClothMesh::clothPositions[0][0].x));
-	//	(ImGui::SliderFloat("Elasticity Constant", &ClothMesh::kElasticity, 0.0f, 1000.f));
-	//	(ImGui::SliderFloat("Damping Constant", &ClothMesh::kDamping, 0.0f, 1000.f));
-	//	(ImGui::SliderFloat("Row Initial Rest ", &ClothMesh::originalSpringRowsLenght, 0.0f, 0.650f));
-	//	(ImGui::SliderFloat("Column Initial Rest ", &ClothMesh::originalSpringColsLenght, 0.0f, 0.650f));
-
-	//	if (ImGui::Button("Reset Mesh"))
-	//	{
-	//		ClothMesh::resetMesh();
-	//	}
-	//}
-
-#pragma endregion
 
 
 	if (ImGui::Button("Reset simulation"))
 	{
 		Cube::reset_simulation();
 	}
-	ImGui::InputFloat("Implus", &Cube::implus);
+	ImGui::InputFloat("Implus", &Cube::e);
 }
 
 void Exemple_PhysicsInit()
 {
-#pragma region Other assignments
 
-
-
-	//Utils::cubePlaneCollision[0] = Utils::Plane(Utils::pointsPlane1[0], Utils::pointsPlane1[1], Utils::pointsPlane1[2]);
-	//Utils::cubePlaneCollision[1] = Utils::Plane(Utils::pointsPlane2[0], Utils::pointsPlane2[1], Utils::pointsPlane2[2]);
-	//Utils::cubePlaneCollision[2] = Utils::Plane(Utils::pointsPlane3[0], Utils::pointsPlane3[1], Utils::pointsPlane3[2]);
-	//Utils::cubePlaneCollision[3] = Utils::Plane(Utils::pointsPlane4[0], Utils::pointsPlane4[1], Utils::pointsPlane4[2]);
-	//Utils::cubePlaneCollision[4] = Utils::Plane(Utils::pointsPlane5[0], Utils::pointsPlane5[1], Utils::pointsPlane5[2]);
-	//Utils::cubePlaneCollision[5] = Utils::Plane(Utils::pointsPlane6[0], Utils::pointsPlane6[1], Utils::pointsPlane6[2]);
-	//Utils::sphere.center = glm::vec3((-4) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (-2 - (-4)))), (0) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (8 - (0)))), (-2) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (-2)))));
-	//Utils::sphere.radius = (1.0f) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (1.0f))));
-	//Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
-	//ClothMesh::prevPositions = new glm::vec3*[ClothMesh::numRows];
-	//ClothMesh::velocity = new glm::vec3*[ClothMesh::numRows];
-	//for (int i = 0; i < ClothMesh::numRows; i++)
-	//{
-	//	ClothMesh::prevPositions[i] = new glm::vec3[ClothMesh::numCols];
-	//	ClothMesh::velocity[i] = new glm::vec3[ClothMesh::numCols];
-	//}
-	//float incrementRows = 8.f / ClothMesh::numRows;
-	//float incrementCols = 8.f / ClothMesh::numCols;
-	//ClothMesh::originalSpringColsLenght = incrementCols;
-	//ClothMesh::originalSpringRowsLenght = incrementRows;
-	//ClothMesh::resetMesh();
-
-#pragma endregion
 	cubePlaneCollision[0] = Utils::Plane(pointsPlane1[0], pointsPlane1[1], pointsPlane1[2]);
 	cubePlaneCollision[1] = Utils::Plane(pointsPlane2[0], pointsPlane2[1], pointsPlane2[2]);
 	cubePlaneCollision[2] = Utils::Plane(pointsPlane3[0], pointsPlane3[1], pointsPlane3[2]);
@@ -401,10 +296,10 @@ void Exemple_PhysicsUpdate(float dt)
 		
 		switch(Cube::CheckCollision())
 		{
-		case 1: //up y = 10
+		case 1: // y = 10
 			Cube::CollisionDetected(cubePlaneCollision[5].normal, dt);
 			break;
-		case -1:
+		case -1:// y = 0
 			Cube::CollisionDetected(cubePlaneCollision[0].normal, dt);
 			break;
 		case 2:// z = 5
@@ -423,9 +318,6 @@ void Exemple_PhysicsUpdate(float dt)
 		Cube::updateCube(Cube::newTransform);
 
 	}
-
-	if (Cube::CheckCollision()) printf("Collision detected \n %f, %f, %f", Cube::position.x, Cube::position.y, Cube::position.z);
-	
 	duration = (std::clock() - startTime) / (double)CLOCKS_PER_SEC;
 	if (duration >= SIMULATION_TIME)
 	{
@@ -560,7 +452,33 @@ void Exemple_PhysicsCleanup() {
 //	//Sphere
 //	Sphere sphere = Utils::Sphere(glm::vec3(0.f, 1.f, 0.f), 1.f);
 //	//Cube
+#pragma region Other assignments
 
+
+
+	//Utils::cubePlaneCollision[0] = Utils::Plane(Utils::pointsPlane1[0], Utils::pointsPlane1[1], Utils::pointsPlane1[2]);
+	//Utils::cubePlaneCollision[1] = Utils::Plane(Utils::pointsPlane2[0], Utils::pointsPlane2[1], Utils::pointsPlane2[2]);
+	//Utils::cubePlaneCollision[2] = Utils::Plane(Utils::pointsPlane3[0], Utils::pointsPlane3[1], Utils::pointsPlane3[2]);
+	//Utils::cubePlaneCollision[3] = Utils::Plane(Utils::pointsPlane4[0], Utils::pointsPlane4[1], Utils::pointsPlane4[2]);
+	//Utils::cubePlaneCollision[4] = Utils::Plane(Utils::pointsPlane5[0], Utils::pointsPlane5[1], Utils::pointsPlane5[2]);
+	//Utils::cubePlaneCollision[5] = Utils::Plane(Utils::pointsPlane6[0], Utils::pointsPlane6[1], Utils::pointsPlane6[2]);
+	//Utils::sphere.center = glm::vec3((-4) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (-2 - (-4)))), (0) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (8 - (0)))), (-2) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (-2)))));
+	//Utils::sphere.radius = (1.0f) + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (2 - (1.0f))));
+	//Sphere::updateSphere(Utils::sphere.center, Utils::sphere.radius);
+	//ClothMesh::prevPositions = new glm::vec3*[ClothMesh::numRows];
+	//ClothMesh::velocity = new glm::vec3*[ClothMesh::numRows];
+	//for (int i = 0; i < ClothMesh::numRows; i++)
+	//{
+	//	ClothMesh::prevPositions[i] = new glm::vec3[ClothMesh::numCols];
+	//	ClothMesh::velocity[i] = new glm::vec3[ClothMesh::numCols];
+	//}
+	//float incrementRows = 8.f / ClothMesh::numRows;
+	//float incrementCols = 8.f / ClothMesh::numCols;
+	//ClothMesh::originalSpringColsLenght = incrementCols;
+	//ClothMesh::originalSpringRowsLenght = incrementRows;
+	//ClothMesh::resetMesh();
+
+#pragma endregion
 //
 //	class Sphere
 //	{
