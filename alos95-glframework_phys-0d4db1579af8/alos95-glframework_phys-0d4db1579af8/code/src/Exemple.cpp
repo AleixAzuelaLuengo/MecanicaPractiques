@@ -75,8 +75,12 @@ namespace Utils
 	public:
 		glm::vec3 velocity = glm::vec3(0, 0, 0);
 		glm::vec3 center;
+
 		float radius;
 		float mass = 1;
+		float friction = 1;
+		float acum = 0;
+		float acum2 = 0;
 		Sphere()
 		{
 			center = glm::vec3(0);
@@ -90,12 +94,16 @@ namespace Utils
 		}
 		void reset_sphere()
 		{
-			center = glm::vec3(std::rand() % 10 - 5, 7, std::rand() % 10 - 5);
+			center = glm::vec3(std::rand() % 8 - 4, 9, std::rand() % 8 - 4);
 			radius = std::rand() % 1 + 1;
 			mass = std::rand() % 3 + 1;
 			velocity = glm::vec3(0, 0, 0);
-			
-			
+			friction = 1;
+			acum = 0;
+			acum2 = 0;
+
+			duration = 0;
+			start = clock();
 		}
 		
 	};
@@ -110,6 +118,11 @@ namespace Utils
 void Exemple_GUI()
 {
 	ImGui::InputFloat("Sphere Mass", &Utils::sphere.mass);
+	if (ImGui::Button("Reset sphere", ImVec2(100, 30)))
+	{
+		Utils::sphere.reset_sphere();
+	}
+
 }
 
 void Exemple_PhysicsInit()
@@ -228,17 +241,51 @@ void Exemple_PhysicsUpdate(float dt)
 		//BUOYANCY
 		float height;
 		float intensityBuoyancy;
-		float intensityVelocity;
+		//in the air
 		if (Utils::sphere.center.y - ClothMesh::clothPositions[ClothMesh::positionX][ClothMesh::positionY].y >= Utils::sphere.radius)
 		{
 			intensityBuoyancy = 0;
+			Utils::sphere.friction = 1;
+			printf("---\n");
+
+
+
 		}
 		else if(ClothMesh::clothPositions[ClothMesh::positionX][ClothMesh::positionY].y - Utils::sphere.center.y  >= Utils::sphere.radius)
 		{
 			intensityBuoyancy = 1;
+
+
+			if (Utils::sphere.velocity.y > 0)
+			{
+				//going up in the water
+				Utils::sphere.friction = 0.3;
+			}
+			else
+			{
+				//going down in the water
+				Utils::sphere.friction = 0.6;
+			}
 		}
 		else
 		{
+			if (Utils::sphere.velocity.y > 0)
+			{
+				//going up in the water
+				Utils::sphere.friction = 0.3 - Utils::sphere.acum;
+				if (0.3 - Utils::sphere.acum>0)
+					Utils::sphere.acum += 0.001;
+
+			}
+			else
+			{
+				//going down in the water
+				Utils::sphere.friction = 0.6 - Utils::sphere.acum2;
+				if (0.3 - Utils::sphere.acum2 > 0)
+					Utils::sphere.acum2 += 0.001;
+
+			}
+
 			float heightDiference = 0;
 			for (int k = 0; k < ClothMesh::numWaves; k++)
 			{
@@ -249,8 +296,8 @@ void Exemple_PhysicsUpdate(float dt)
 		}
 
 		buoyancy = ClothMesh::fluidDesnity * (glm::vec3(0, 9.81f, 0)) * ((ClothMesh::initialPos[ClothMesh::positionX][ClothMesh::positionY] - tempPos.y) * intensityBuoyancy);
-		tempVel += dt * (glm::vec3(0, -9.81f, 0) + buoyancy/Utils::sphere.mass);
-		Utils::sphere.velocity += tempVel * intensityVelocity;
+		tempVel += dt * ((glm::vec3(0, -9.81f, 0)) + buoyancy / Utils::sphere.mass);
+		Utils::sphere.velocity += tempVel* Utils::sphere.friction;
 		Utils::sphere.center += Utils::sphere.velocity * dt;
 		#pragma endregion
 
