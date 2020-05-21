@@ -78,6 +78,14 @@ namespace Utils
 
 		float radius;
 		float mass = 1;
+		/*
+			FRICTION:
+			We use a friction value that changes depending on which point of the water you are and if you're going up or down
+			(to avoid the ball bouncing too high or going too low)
+
+			Also, we have 2 accum values that will sum to the friction when colliding with the water. 
+			This makes the ball bounce less and less as it keeps touching the water collision point.
+		*/
 		float friction = 1;
 		float acum = 0;
 		float acum2 = 0;
@@ -246,15 +254,11 @@ void Exemple_PhysicsUpdate(float dt)
 		{
 			intensityBuoyancy = 0;
 			Utils::sphere.friction = 1;
-			printf("---\n");
-
-
 
 		}
 		else if(ClothMesh::clothPositions[ClothMesh::positionX][ClothMesh::positionY].y - Utils::sphere.center.y  >= Utils::sphere.radius)
 		{
 			intensityBuoyancy = 1;
-
 
 			if (Utils::sphere.velocity.y > 0)
 			{
